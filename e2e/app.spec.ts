@@ -1,0 +1,24 @@
+import { test, expect } from "@playwright/test";
+
+test("homepage loads", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /superpower/i })).toBeVisible();
+});
+
+test("login page loads", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByText("Welcome back")).toBeVisible();
+});
+
+test("demo login redirects to dashboard", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("demo@potentially.ai");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/dashboard");
+});
+
+test("search page works", async ({ page }) => {
+  await page.goto("/search");
+  await expect(page.getByText("AI Search")).toBeVisible();
+});
