@@ -1,0 +1,50 @@
+[
+  {
+    "version": "20260626145530",
+    "name": "initial_schema_tables",
+    "file": "20260626145530_initial_schema_tables.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626145545",
+    "name": "initial_schema_indexes_and_functions",
+    "file": "20260626145545_initial_schema_indexes_and_functions.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626145601",
+    "name": "rls_policies",
+    "file": "20260626145601_rls_policies.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626145704",
+    "name": "harden_function_grants",
+    "file": "20260626145704_harden_function_grants.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626150000",
+    "name": "vector_index",
+    "file": "20260626150000_vector_index.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626180000",
+    "name": "fix_profiles_rls_recursion",
+    "file": "20260626180000_fix_profiles_rls_recursion.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626200000",
+    "name": "onboarding_and_defaults",
+    "file": "20260626200000_onboarding_and_defaults.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260626210000",
+    "name": "fix_rls_function_grants",
+    "file": "20260626210000_fix_rls_function_grants.sql",
+    "remote": "applied"
+  }
+]

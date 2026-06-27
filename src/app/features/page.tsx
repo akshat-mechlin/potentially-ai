@@ -48,22 +48,25 @@ const features = [
 
 export default function FeaturesPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       <PublicNav />
-      <div className="mx-auto max-w-4xl px-6 pt-32 pb-20">
+      <div className="mx-auto max-w-4xl px-4 pb-16 pt-28 sm:px-6 sm:pb-20 sm:pt-36">
         <div className="text-center">
-          <h1 className="text-4xl font-bold">Features</h1>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">Features</h1>
+          <p className="mt-3 text-lg text-muted-foreground">
             Everything you need to turn relationships into opportunities
           </p>
         </div>
-        <div className="mt-16 grid gap-8 md:grid-cols-2">
+        <div className="mt-16 grid gap-6 md:grid-cols-2">
           {features.map((feature) => (
-            <div key={feature.title} className="space-y-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <div
+              key={feature.title}
+              className="rounded-2xl border border-border bg-card p-6"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-secondary">
                 <feature.icon className="h-5 w-5 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold">{feature.title}</h3>
+              <h3 className="font-display text-xl text-foreground">{feature.title}</h3>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {feature.description}
               </p>

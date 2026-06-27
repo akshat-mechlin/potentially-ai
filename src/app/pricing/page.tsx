@@ -51,12 +51,14 @@ const plans = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       <PublicNav />
-      <div className="mx-auto max-w-5xl px-6 pt-32 pb-20">
+      <div className="mx-auto max-w-5xl px-4 pb-16 pt-28 sm:px-6 sm:pb-20 sm:pt-36">
         <div className="text-center">
-          <h1 className="text-4xl font-bold">Simple, transparent pricing</h1>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <h1 className="font-display text-4xl leading-tight text-foreground sm:text-5xl">
+            Simple, transparent pricing
+          </h1>
+          <p className="mt-3 text-lg text-muted-foreground">
             Start free, upgrade when your network grows
           </p>
         </div>
@@ -64,18 +66,18 @@ export default function PricingPage() {
           {plans.map((plan) => (
             <Card
               key={plan.name}
-              className={plan.popular ? "border-primary shadow-lg" : ""}
+              className={`relative border-border ${plan.popular ? "border-primary shadow-md" : ""}`}
             >
               <CardHeader>
                 {plan.popular && (
-                  <span className="mb-2 w-fit rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-xs font-medium uppercase tracking-wide text-primary-foreground">
                     Most popular
                   </span>
                 )}
-                <CardTitle>{plan.name}</CardTitle>
+                <CardTitle className="font-display text-2xl">{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="font-display text-4xl">{plan.price}</span>
                   {plan.price !== "Custom" && (
                     <span className="text-muted-foreground">/month</span>
                   )}

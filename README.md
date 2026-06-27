@@ -105,9 +105,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 1. Create a project at [supabase.com](https://supabase.com)
 2. Enable Google and Azure OAuth in Authentication → Providers
-3. Run migrations:
+3. Run migrations (see `supabase/migrations/README.md` for sequence):
 
 ```bash
+npm run db:validate   # verify local migration order
 npx supabase link --project-ref your-project-ref
 npx supabase db push
 ```

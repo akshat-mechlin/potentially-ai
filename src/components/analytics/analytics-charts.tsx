@@ -13,7 +13,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Searches per Day</CardTitle>
+          <CardTitle>Searches per Day</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>
@@ -30,7 +30,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Workspace Growth</CardTitle>
+          <CardTitle>Workspace Growth</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>
@@ -52,14 +52,14 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Top Contacts</CardTitle>
+          <CardTitle>Top Contacts</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {data.top_contacts.map((contact, i) => (
               <div key={contact.name} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
                     {i + 1}
                   </span>
                   <span className="text-sm font-medium">{contact.name}</span>
@@ -75,7 +75,7 @@ export function AnalyticsCharts({ data }: AnalyticsChartsProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Engagement by Type</CardTitle>
+          <CardTitle>Engagement by Type</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>

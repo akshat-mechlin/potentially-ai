@@ -2,20 +2,22 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Upload } from "lucide-react";
+import { Search } from "lucide-react";
 import { ContactCard } from "@/components/contacts/contact-card";
+import { CsvImportButton } from "@/components/contacts/csv-import-button";
+import { useIsClient } from "@/hooks/use-is-client";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Contact } from "@/types";
-import { toast } from "sonner";
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
+  const mounted = useIsClient();
 
   const { data, isLoading } = useQuery<{ contacts: Contact[] }>({
     queryKey: ["contacts"],
     queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+    enabled: mounted,
   });
 
   const contacts = data?.contacts.filter((c) => {
@@ -29,23 +31,13 @@ export default function ContactsPage() {
     );
   });
 
-  const handleImport = () => {
-    toast.success("CSV import dialog would open here");
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Contacts</h1>
-          <p className="text-muted-foreground">
-            {contacts?.length ?? 0} contacts in your network
-          </p>
-        </div>
-        <Button onClick={handleImport}>
-          <Upload className="mr-2 h-4 w-4" />
-          Import CSV
-        </Button>
+        <p className="text-sub text-muted-foreground" suppressHydrationWarning>
+          {mounted ? (contacts?.length ?? 0) : 0} contacts in your network
+        </p>
+        <CsvImportButton />
       </div>
 
       <div className="relative max-w-md">
@@ -58,7 +50,7 @@ export default function ContactsPage() {
         />
       </div>
 
-      {isLoading ? (
+      {(!mounted || isLoading) ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-32" />

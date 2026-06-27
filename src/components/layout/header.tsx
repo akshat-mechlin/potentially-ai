@@ -1,11 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Bell, Command, LogOut, Moon, Sun, User } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { Command, LogOut, Moon, Search, Sun, User } from "lucide-react";
 import { useUIStore } from "@/stores";
 import { useTheme } from "@/components/theme-provider";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
+import { getPageTitle } from "@/lib/nav-items";
+import { BrandLogo } from "@/components/brand-logo";
+import { NotificationBell } from "./notification-bell";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -25,8 +29,10 @@ interface HeaderProps {
 
 export function Header({ title, userName = "Alex Morgan", userAvatar }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { setCommandMenuOpen } = useUIStore();
   const { resolvedTheme, setTheme } = useTheme();
+  const pageTitle = title ?? getPageTitle(pathname);
 
   const handleLogout = async () => {
     if (!isDemoMode()) {
@@ -37,33 +43,43 @@ export function Header({ title, userName = "Alex Morgan", userAvatar }: HeaderPr
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/80 px-6 backdrop-blur-sm">
-      <div className="flex items-center gap-4">
-        {title && <h1 className="text-lg font-semibold">{title}</h1>}
+    <header className="app-header sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur-lg supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)] sm:px-6">
+      <div className="flex min-w-0 items-center gap-3">
+        <Link href="/dashboard" className="shrink-0 lg:hidden">
+          <BrandLogo showText={false} size="sm" />
+        </Link>
+        <h1 className="font-display truncate text-xl sm:text-2xl">{pageTitle}</h1>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 lg:hidden"
+          onClick={() => router.push("/search")}
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+
         <Button
           variant="outline"
           size="sm"
-          className="hidden gap-2 text-muted-foreground md:flex"
+          className="hidden gap-2 text-muted-foreground lg:flex"
           onClick={() => setCommandMenuOpen(true)}
         >
           <Command className="h-3.5 w-3.5" />
           <span className="text-xs">Search...</span>
-          <kbd className="pointer-events-none ml-2 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+          <kbd className="pointer-events-none ml-2 hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 xl:flex">
             <span className="text-xs">⌘</span>K
           </kbd>
         </Button>
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
-        </Button>
+        <NotificationBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
               <Avatar className="h-8 w-8">
                 <AvatarImage src={userAvatar || undefined} />
                 <AvatarFallback>{getInitials(userName)}</AvatarFallback>

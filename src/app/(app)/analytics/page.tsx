@@ -13,12 +13,9 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-muted-foreground">
-          Track searches, engagement, and workspace growth
-        </p>
-      </div>
+      <p className="text-sub text-muted-foreground">
+        Track searches, engagement, and workspace growth
+      </p>
       {isLoading ? (
         <div className="grid gap-6 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (

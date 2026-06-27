@@ -109,7 +109,9 @@ export interface Introduction {
   notes: string | null;
   completed_at: string | null;
   created_at: string;
+  updated_at?: string;
   target_contact?: Contact;
+  connector_name?: string | null;
 }
 
 export interface SearchResult {

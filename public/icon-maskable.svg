@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-label="Potentially">
+  <rect width="512" height="512" fill="#2D4739"/>
+  <!-- Safe zone padding for maskable icons -->
+  <path
+    d="M160 292C160 292 208 212 256 212C304 212 352 292 352 292"
+    stroke="#F9F8F4"
+    stroke-width="24"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M160 292L192 254"
+    stroke="#F9F8F4"
+    stroke-width="24"
+    stroke-linecap="round"
+    opacity="0.7"
+  />
+  <path
+    d="M352 292L320 254"
+    stroke="#F9F8F4"
+    stroke-width="24"
+    stroke-linecap="round"
+    opacity="0.7"
+  />
+  <circle cx="256" cy="196" r="38" fill="#F9F8F4"/>
+  <circle cx="152" cy="304" r="44" fill="#F9F8F4"/>
+  <circle cx="360" cy="304" r="44" fill="#F9F8F4"/>
+  <circle cx="256" cy="252" r="16" fill="#F9F8F4" opacity="0.45"/>
+</svg>

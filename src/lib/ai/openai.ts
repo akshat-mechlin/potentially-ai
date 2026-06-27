@@ -204,7 +204,7 @@ function generateMockOutreach(params: {
   goal: string;
 }): OutreachResult {
   return {
-    subject: `Introduction — ${params.goal}`,
+    subject: `Introduction: ${params.goal}`,
     body: `Hi ${params.contactName.split(" ")[0]},\n\nI hope this message finds you well. I wanted to reach out regarding ${params.goal}.\n\nI'd love to connect and explore how we might collaborate.\n\nBest regards`,
     cta: "Would you be open to a brief 15-minute call this week?",
   };

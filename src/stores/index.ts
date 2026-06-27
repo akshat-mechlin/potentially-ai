@@ -51,15 +51,34 @@ export const useSearchStore = create<SearchState>((set, get) => ({
 interface UIState {
   sidebarOpen: boolean;
   commandMenuOpen: boolean;
+  compactMode: boolean;
+  mobileMoreOpen: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setCommandMenuOpen: (open: boolean) => void;
+  setCompactMode: (compact: boolean) => void;
+  setMobileMoreOpen: (open: boolean) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  sidebarOpen: true,
-  commandMenuOpen: false,
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),
-}));
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      commandMenuOpen: false,
+      compactMode: false,
+      mobileMoreOpen: false,
+      toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),
+      setCompactMode: (compactMode) => set({ compactMode }),
+      setMobileMoreOpen: (open) => set({ mobileMoreOpen: open }),
+    }),
+    {
+      name: "potentially-ui",
+      partialize: (state) => ({
+        compactMode: state.compactMode,
+        sidebarOpen: state.sidebarOpen,
+      }),
+    },
+  ),
+);

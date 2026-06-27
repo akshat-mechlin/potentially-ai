@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/components/theme-provider";
+import { useUIStore } from "@/stores";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,26 +12,79 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
+const SETTINGS_KEY = "potentially-notification-prefs";
+
+type NotificationPrefs = {
+  email: boolean;
+  intros: boolean;
+  sync: boolean;
+};
+
+const defaultNotifications: NotificationPrefs = {
+  email: true,
+  intros: true,
+  sync: false,
+};
+
+function readNotificationPrefs(): NotificationPrefs {
+  if (typeof window === "undefined") return defaultNotifications;
+  const raw = localStorage.getItem(SETTINGS_KEY);
+  if (!raw) return defaultNotifications;
+  try {
+    return JSON.parse(raw) as NotificationPrefs;
+  } catch {
+    return defaultNotifications;
+  }
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const [name, setName] = useState("Alex Morgan");
-  const [email, setEmail] = useState("demo@potentially.ai");
-  const [notifications, setNotifications] = useState({
-    email: true,
-    intros: true,
-    sync: false,
-  });
+  const { compactMode, setCompactMode } = useUIStore();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [title, setTitle] = useState("");
+  const [notifications, setNotifications] = useState(readNotificationPrefs);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    toast.success("Settings saved");
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((profile) => {
+        if (profile) {
+          setName(profile.name || "");
+          setEmail(profile.email || "");
+          setTitle(profile.title || "");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, title }),
+      });
+      if (!res.ok) throw new Error("Failed to save profile");
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(notifications));
+      toast.success("Settings saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading settings...</p>;
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Manage your account and preferences</p>
-      </div>
+      <p className="text-sub text-muted-foreground">Manage your account and preferences</p>
 
       <Tabs defaultValue="profile">
         <TabsList>
@@ -52,13 +106,19 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+                <Input value={email} disabled type="email" />
               </div>
               <div className="space-y-2">
                 <Label>Title</Label>
-                <Input placeholder="CEO at Acme Ventures" />
+                <Input
+                  placeholder="CEO at Acme Ventures"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
               </div>
-              <Button onClick={handleSave}>Save changes</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? "Saving..." : "Save changes"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -82,9 +142,11 @@ export default function SettingsPage() {
                   </div>
                   <Switch
                     checked={notifications[item.key]}
-                    onCheckedChange={(checked) =>
-                      setNotifications((n) => ({ ...n, [item.key]: checked }))
-                    }
+                    onCheckedChange={(checked) => {
+                      const next = { ...notifications, [item.key]: checked };
+                      setNotifications(next);
+                      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+                    }}
                   />
                 </div>
               ))}
@@ -124,7 +186,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-medium">Compact mode</p>
                   <p className="text-xs text-muted-foreground">Reduce spacing in the UI</p>
                 </div>
-                <Switch />
+                <Switch checked={compactMode} onCheckedChange={setCompactMode} />
               </div>
             </CardContent>
           </Card>

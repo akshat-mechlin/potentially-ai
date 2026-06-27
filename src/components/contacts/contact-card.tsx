@@ -14,7 +14,7 @@ interface ContactCardProps {
 export function ContactCard({ contact }: ContactCardProps) {
   return (
     <Link href={`/contacts/${contact.id}`}>
-      <Card className="transition-all hover:shadow-md hover:border-primary/20">
+      <Card className="border-border transition-all hover:border-primary/30 hover:shadow-md">
         <CardContent className="flex items-start gap-4 p-4">
           <Avatar className="h-10 w-10">
             <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>

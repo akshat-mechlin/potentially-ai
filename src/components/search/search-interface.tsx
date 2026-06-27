@@ -75,7 +75,7 @@ export function SearchInterface() {
                 setLocalQuery(prompt);
                 handleSearch(prompt);
               }}
-              className="rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:bg-secondary hover:text-foreground"
             >
               {prompt}
             </button>
@@ -99,7 +99,7 @@ export function SearchInterface() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
-          <div className="rounded-xl border bg-muted/30 p-4">
+          <div className="rounded-xl border border-border bg-secondary/60 p-4">
             <p className="text-sm leading-relaxed">{results.summary}</p>
             {results.suggested_actions.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">

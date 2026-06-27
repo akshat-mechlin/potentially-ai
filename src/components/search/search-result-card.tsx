@@ -21,7 +21,7 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
     >
-      <Card className="transition-shadow hover:shadow-md">
+      <Card className="border-border transition-shadow hover:border-primary/20 hover:shadow-md">
         <CardContent className="flex items-start gap-4 p-4">
           <Avatar className="h-10 w-10">
             <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>

@@ -1,12 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-
-function isDemoMode() {
-  return (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL === "https://your-project.supabase.co"
-  );
-}
+import { isDemoMode } from "@/lib/app-config";
 
 export async function updateSession(request: NextRequest) {
   if (isDemoMode()) {

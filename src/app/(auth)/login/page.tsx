@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/layout/auth-shell";
 import { toast } from "sonner";
 
 const loginSchema = z.object({
@@ -74,34 +75,32 @@ export default function LoginPage() {
 
   const handleMagicLink = async (email: string) => {
     if (isDemoMode()) {
-      toast.success("Magic link sent! (Demo mode — redirecting)");
+      toast.success("Magic link sent! (Demo mode: redirecting)");
       router.push("/dashboard");
       return;
     }
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/api/auth/callback` },
-    });
-    if (error) toast.error(error.message);
-    else toast.success("Check your email for the magic link");
+    try {
+      const res = await fetch("/api/auth/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to send magic link");
+      toast.success(result.message || "Check your email for the magic link");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send magic link");
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <Link href="/" className="mx-auto mb-4 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-semibold">Potentially</span>
-          </Link>
-          <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <AuthShell step={1} totalSteps={1} stepLabel="Sign in">
+      <CardHeader className="space-y-1 p-0 text-center">
+        <CardTitle className="font-display text-4xl text-foreground">Welcome back</CardTitle>
+        <CardDescription>Sign in to your relationship intelligence workspace</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 p-0 pt-6">
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" onClick={() => handleOAuth("google")}>
               Google
@@ -165,7 +164,6 @@ export default function LoginPage() {
             </Link>
           </p>
         </CardContent>
-      </Card>
-    </div>
+    </AuthShell>
   );
 }

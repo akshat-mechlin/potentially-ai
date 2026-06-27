@@ -5,13 +5,12 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Sparkles } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/layout/auth-shell";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -31,47 +30,47 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) toast.error(error.message);
-    else setSent(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: data.email }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to send reset email");
+      setSent(true);
+      toast.success(result.message);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send reset email");
+    }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <Link href="/" className="mx-auto mb-4 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
+    <AuthShell>
+      <CardHeader className="space-y-1 p-0 text-center">
+        <CardTitle className="font-display text-4xl text-foreground">Reset password</CardTitle>
+        <CardDescription>
+          {sent ? "Check your email for a reset link" : "Enter your email to receive a reset link"}
+        </CardDescription>
+      </CardHeader>
+      {!sent && (
+        <CardContent className="p-0 pt-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" type="email" {...register("email")} />
             </div>
-          </Link>
-          <CardTitle>Reset password</CardTitle>
-          <CardDescription>
-            {sent ? "Check your email for a reset link" : "Enter your email to receive a reset link"}
-          </CardDescription>
-        </CardHeader>
-        {!sent && (
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" {...register("email")} />
-              </div>
-              <Button type="submit" className="w-full">
-                Send reset link
-              </Button>
-            </form>
-            <p className="mt-4 text-center text-sm">
-              <Link href="/login" className="text-primary hover:underline">
-                Back to login
-              </Link>
-            </p>
-          </CardContent>
-        )}
-      </Card>
-    </div>
+            <Button type="submit" className="w-full">
+              Send reset link
+            </Button>
+          </form>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            <Link href="/login" className="text-primary hover:underline">
+              Back to login
+            </Link>
+          </p>
+        </CardContent>
+      )}
+    </AuthShell>
   );
 }

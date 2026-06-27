@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateOutreach } from "@/lib/ai/openai";
-import { DEMO_CONTACTS } from "@/lib/demo-data";
+import { getContact } from "@/lib/data/contacts";
 
 const outreachSchema = z.object({
   contact_id: z.string(),
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const params = outreachSchema.parse(body);
 
-    const contact = DEMO_CONTACTS.find((c) => c.id === params.contact_id);
+    const contact = await getContact(params.contact_id);
     if (!contact) {
       return NextResponse.json({ error: "Contact not found" }, { status: 404 });
     }
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+    console.error("Outreach generation failed:", error);
     return NextResponse.json({ error: "Outreach generation failed" }, { status: 500 });
   }
 }

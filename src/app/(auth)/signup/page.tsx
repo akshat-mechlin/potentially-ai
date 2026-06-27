@@ -6,13 +6,13 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Sparkles, Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { Loader2 } from "lucide-react";
 import { isDemoMode } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/layout/auth-shell";
 import { toast } from "sonner";
 
 const signupSchema = z
@@ -50,18 +50,20 @@ export default function SignupPage() {
         return;
       }
 
-      const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: { full_name: data.name },
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-        },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          password: data.password,
+        }),
       });
 
-      if (error) throw error;
-      toast.success("Check your email to verify your account");
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Signup failed");
+
+      toast.success(result.message || "Check your email to verify your account");
       router.push("/login");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Signup failed");
@@ -71,19 +73,12 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <Link href="/" className="mx-auto mb-4 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-semibold">Potentially</span>
-          </Link>
-          <CardTitle>Create your account</CardTitle>
-          <CardDescription>Start building your relationship intelligence</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <AuthShell step={1} totalSteps={1} stepLabel="Welcome">
+      <CardHeader className="space-y-1 p-0 text-center">
+        <CardTitle className="font-display text-4xl text-foreground">Create your account</CardTitle>
+        <CardDescription>Start building your relationship intelligence</CardDescription>
+      </CardHeader>
+      <CardContent className="p-0 pt-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full name</Label>
@@ -122,7 +117,6 @@ export default function SignupPage() {
             </Link>
           </p>
         </CardContent>
-      </Card>
-    </div>
+    </AuthShell>
   );
 }

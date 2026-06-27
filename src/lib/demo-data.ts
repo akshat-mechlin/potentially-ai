@@ -1,4 +1,5 @@
 import type { Contact, Company, Workspace, Profile } from "@/types";
+import { isDemoMode as checkDemoMode } from "@/lib/app-config";
 
 export const DEMO_WORKSPACE: Workspace = {
   id: "demo-workspace-001",
@@ -283,8 +284,5 @@ export const SUGGESTED_PROMPTS = [
 ];
 
 export function isDemoMode() {
-  return (
-    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.NEXT_PUBLIC_SUPABASE_URL === "https://your-project.supabase.co"
-  );
+  return checkDemoMode();
 }

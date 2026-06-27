@@ -1,16 +1,32 @@
 /**
  * Seed script for Potentially.ai
- * Run with: npx tsx scripts/seed.ts
- * Requires SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_URL
+ * Run with: npm run seed
+ * Requires SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_URL in .env
  */
 
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
+import { loadEnv } from "./load-env";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+loadEnv();
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!url || url.includes("your-project")) {
+  console.error("Missing NEXT_PUBLIC_SUPABASE_URL in .env");
+  process.exit(1);
+}
+
+if (!serviceKey || serviceKey === "your-service-role-key") {
+  console.error("Missing SUPABASE_SERVICE_ROLE_KEY in .env");
+  process.exit(1);
+}
+
+const supabase = createClient(url, serviceKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+  realtime: { transport: ws as unknown as typeof WebSocket },
+});
 
 const DEMO_USER_EMAIL = "demo@potentially.ai";
 const DEMO_PASSWORD = "demo123456";
@@ -18,7 +34,6 @@ const DEMO_PASSWORD = "demo123456";
 async function seed() {
   console.log("🌱 Seeding Potentially.ai database...\n");
 
-  // Create demo user
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email: DEMO_USER_EMAIL,
     password: DEMO_PASSWORD,
@@ -51,7 +66,7 @@ async function seed() {
 async function seedWorkspace(userId: string) {
   const { data: workspace, error: wsError } = await supabase
     .from("workspaces")
-    .upsert({ name: "Acme Ventures", slug: "acme-ventures", plan: "pro" })
+    .upsert({ name: "Acme Ventures", slug: "acme-ventures", plan: "pro" }, { onConflict: "slug" })
     .select()
     .single();
 
@@ -62,11 +77,19 @@ async function seedWorkspace(userId: string) {
 
   console.log("✓ Workspace:", workspace.name);
 
-  await supabase.from("workspace_members").upsert({
-    workspace_id: workspace.id,
-    user_id: userId,
-    role: "owner",
-  });
+  const { error: memberError } = await supabase.from("workspace_members").upsert(
+    {
+      workspace_id: workspace.id,
+      user_id: userId,
+      role: "owner",
+    },
+    { onConflict: "workspace_id,user_id" },
+  );
+
+  if (memberError) {
+    console.error("Workspace member error:", memberError.message);
+    return;
+  }
 
   const companies = [
     { name: "Stripe", industry: "Fintech", domain: "stripe.com" },
@@ -85,16 +108,37 @@ async function seedWorkspace(userId: string) {
 
   const contacts = [
     { full_name: "Sarah Chen", title: "CTO", email: "sarah@stripe.com", company_name: "Stripe" },
-    { full_name: "James Park", title: "Founder & CEO", email: "james@anthropic.com", company_name: "Anthropic" },
-    { full_name: "Emily Rodriguez", title: "Partner", email: "emily@sequoiacap.com", company_name: "Sequoia Capital" },
+    {
+      full_name: "James Park",
+      title: "Founder & CEO",
+      email: "james@anthropic.com",
+      company_name: "Anthropic",
+    },
+    {
+      full_name: "Emily Rodriguez",
+      title: "Partner",
+      email: "emily@sequoiacap.com",
+      company_name: "Sequoia Capital",
+    },
   ];
 
   for (const contact of contacts) {
+    let embedding: number[] | undefined;
+    if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("your-")) {
+      try {
+        const { buildContactEmbedding } = await import("../src/lib/data/embeddings");
+        embedding = await buildContactEmbedding(contact);
+      } catch {
+        // embeddings are optional during seed
+      }
+    }
+
     await supabase.from("contacts").upsert({
       ...contact,
       workspace_id: workspace.id,
       owner_id: userId,
       tags: ["demo"],
+      ...(embedding ? { embedding } : {}),
     });
   }
 

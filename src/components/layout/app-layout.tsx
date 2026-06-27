@@ -3,8 +3,11 @@
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { CommandMenu } from "./command-menu";
+import { DemoModeBanner } from "./demo-mode-banner";
+import { MobileTabBar } from "./mobile-tab-bar";
+import { MobileMoreSheet } from "./mobile-more-sheet";
+import { InstallBanner } from "@/components/pwa/install-banner";
 import { useUIStore } from "@/stores";
-import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -14,20 +17,27 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, title, userName, userAvatar }: AppLayoutProps) {
-  const { sidebarOpen } = useUIStore();
+  const { sidebarOpen, compactMode } = useUIStore();
+  const expandedWidth = compactMode ? 224 : 256;
+  const collapsedWidth = compactMode ? 56 : 64;
+  const sidebarWidth = sidebarOpen ? expandedWidth : collapsedWidth;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-[100dvh] bg-background">
       <Sidebar />
       <div
-        className={cn(
-          "transition-all duration-200",
-          sidebarOpen ? "ml-64" : "ml-16",
-        )}
+        className="app-shell-main flex min-h-[100dvh] flex-col transition-[margin] duration-200"
+        style={{ ["--sidebar-width" as string]: `${sidebarWidth}px` }}
       >
         <Header title={title} userName={userName} userAvatar={userAvatar} />
-        <main className="p-6">{children}</main>
+        <main className="app-main flex-1 p-4 sm:p-6">
+          <DemoModeBanner />
+          <div className="app-page space-y-6 sm:space-y-8">{children}</div>
+        </main>
       </div>
+      <MobileTabBar />
+      <MobileMoreSheet />
+      <InstallBanner />
       <CommandMenu />
     </div>
   );

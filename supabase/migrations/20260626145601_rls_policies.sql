@@ -1,6 +1,6 @@
--- Row Level Security Policies
+-- Migration 3/5: Row Level Security policies
+-- Applied to remote: yes
 
--- Profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own profile" ON profiles
@@ -18,7 +18,6 @@ CREATE POLICY "Workspace members can view teammate profiles" ON profiles
     )
   );
 
--- Workspaces
 ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view workspace" ON workspaces
@@ -30,7 +29,6 @@ CREATE POLICY "Owners and admins can update workspace" ON workspaces
 CREATE POLICY "Authenticated users can create workspace" ON workspaces
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
--- Workspace members
 ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view workspace members" ON workspace_members
@@ -42,7 +40,6 @@ CREATE POLICY "Owners and admins can manage members" ON workspace_members
 CREATE POLICY "Users can join via invite" ON workspace_members
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Workspace invites
 ALTER TABLE workspace_invites ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view invites" ON workspace_invites
@@ -51,13 +48,11 @@ CREATE POLICY "Members can view invites" ON workspace_invites
 CREATE POLICY "Owners and admins can create invites" ON workspace_invites
   FOR INSERT WITH CHECK (get_workspace_role(workspace_id) IN ('owner', 'admin'));
 
--- OAuth connections
 ALTER TABLE oauth_connections ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own connections" ON oauth_connections
   FOR ALL USING (auth.uid() = user_id AND is_workspace_member(workspace_id));
 
--- Companies
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view companies" ON companies
@@ -66,7 +61,6 @@ CREATE POLICY "Members can view companies" ON companies
 CREATE POLICY "Members can manage companies" ON companies
   FOR ALL USING (is_workspace_member(workspace_id) AND get_workspace_role(workspace_id) != 'viewer');
 
--- Contacts
 ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view contacts" ON contacts
@@ -75,7 +69,6 @@ CREATE POLICY "Members can view contacts" ON contacts
 CREATE POLICY "Members can manage contacts" ON contacts
   FOR ALL USING (is_workspace_member(workspace_id) AND get_workspace_role(workspace_id) != 'viewer');
 
--- Contact notes
 ALTER TABLE contact_notes ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view notes" ON contact_notes
@@ -89,7 +82,6 @@ CREATE POLICY "Members can view notes" ON contact_notes
 CREATE POLICY "Members can manage own notes" ON contact_notes
   FOR ALL USING (auth.uid() = author_id);
 
--- Relationship events
 ALTER TABLE relationship_events ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view events" ON relationship_events
@@ -98,7 +90,6 @@ CREATE POLICY "Members can view events" ON relationship_events
 CREATE POLICY "Members can create events" ON relationship_events
   FOR INSERT WITH CHECK (is_workspace_member(workspace_id));
 
--- Introductions
 ALTER TABLE introductions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view introductions" ON introductions
@@ -107,7 +98,6 @@ CREATE POLICY "Members can view introductions" ON introductions
 CREATE POLICY "Members can manage introductions" ON introductions
   FOR ALL USING (is_workspace_member(workspace_id) AND get_workspace_role(workspace_id) != 'viewer');
 
--- Search history
 ALTER TABLE search_history ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own search history" ON search_history
@@ -116,13 +106,11 @@ CREATE POLICY "Users can view own search history" ON search_history
 CREATE POLICY "Users can create search history" ON search_history
   FOR INSERT WITH CHECK (auth.uid() = user_id AND is_workspace_member(workspace_id));
 
--- Saved searches
 ALTER TABLE saved_searches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own saved searches" ON saved_searches
   FOR ALL USING (auth.uid() = user_id AND is_workspace_member(workspace_id));
 
--- Activities
 ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view activities" ON activities
@@ -131,7 +119,6 @@ CREATE POLICY "Members can view activities" ON activities
 CREATE POLICY "System can insert activities" ON activities
   FOR INSERT WITH CHECK (is_workspace_member(workspace_id));
 
--- Notifications
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own notifications" ON notifications
@@ -140,7 +127,6 @@ CREATE POLICY "Users can view own notifications" ON notifications
 CREATE POLICY "Users can update own notifications" ON notifications
   FOR UPDATE USING (auth.uid() = user_id);
 
--- Sync jobs
 ALTER TABLE sync_jobs ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own sync jobs" ON sync_jobs
@@ -149,13 +135,11 @@ CREATE POLICY "Users can view own sync jobs" ON sync_jobs
 CREATE POLICY "Users can create sync jobs" ON sync_jobs
   FOR INSERT WITH CHECK (auth.uid() = user_id AND is_workspace_member(workspace_id));
 
--- Feature flags (public read)
 ALTER TABLE feature_flags ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Anyone can read feature flags" ON feature_flags
   FOR SELECT USING (true);
 
--- AI usage
 ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Members can view workspace AI usage" ON ai_usage
@@ -164,7 +148,6 @@ CREATE POLICY "Members can view workspace AI usage" ON ai_usage
 CREATE POLICY "Users can log AI usage" ON ai_usage
   FOR INSERT WITH CHECK (auth.uid() = user_id AND is_workspace_member(workspace_id));
 
--- Admin policies (for is_admin users)
 CREATE POLICY "Admins can view all profiles" ON profiles
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)

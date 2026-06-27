@@ -12,7 +12,7 @@ import {
   Send,
   Loader2,
 } from "lucide-react";
-import { DEMO_CONTACTS } from "@/lib/demo-data";
+import type { Contact, OutreachResult } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,7 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
-import type { OutreachResult } from "@/types";
 import { toast } from "sonner";
 
 export default function ContactDetailPage({
@@ -35,7 +34,6 @@ export default function ContactDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const contact = DEMO_CONTACTS.find((c) => c.id === id);
   const [outreachType, setOutreachType] = useState<"cold_email" | "warm_intro" | "linkedin">(
     "cold_email",
   );
@@ -44,14 +42,34 @@ export default function ContactDetailPage({
   const [generating, setGenerating] = useState(false);
   const [outreach, setOutreach] = useState<OutreachResult | null>(null);
 
+  const { data: contact, isLoading } = useQuery<Contact>({
+    queryKey: ["contact", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/contacts/${id}`);
+      if (!res.ok) throw new Error("Contact not found");
+      return res.json();
+    },
+  });
+
+  const { data: allContacts } = useQuery<{ contacts: Contact[] }>({
+    queryKey: ["contacts"],
+    queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+  });
+
   const { data: summary } = useQuery({
     queryKey: ["contact-summary", id],
     queryFn: async () => {
-      if (!contact) return "";
-      return `${contact.full_name} is ${contact.title || "a professional"}${contact.company_name ? ` at ${contact.company_name}` : ""}. ${contact.bio || ""}`;
+      const res = await fetch(`/api/contacts/${id}/summary`);
+      if (!res.ok) throw new Error("Failed to load summary");
+      const data = await res.json();
+      return data.summary as string;
     },
     enabled: !!contact,
   });
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading contact...</p>;
+  }
 
   if (!contact) {
     return (
@@ -78,6 +96,7 @@ export default function ContactDetailPage({
         }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate outreach");
       setOutreach(data);
       toast.success("Outreach generated");
     } catch {
@@ -87,7 +106,22 @@ export default function ContactDetailPage({
     }
   };
 
-  const mutualContacts = DEMO_CONTACTS.filter((c) => c.id !== id).slice(0, 3);
+  const handleRequestIntro = async () => {
+    try {
+      const res = await fetch("/api/intros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_contact_id: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to request introduction");
+      toast.success("Introduction requested");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to request introduction");
+    }
+  };
+
+  const mutualContacts = (allContacts?.contacts ?? []).filter((c) => c.id !== id).slice(0, 3);
 
   const timelineEvents = [
     { type: "email", title: "Email exchange", date: contact.last_interaction_at },
@@ -109,8 +143,8 @@ export default function ContactDetailPage({
           <AvatarFallback className="text-lg">{getInitials(contact.full_name)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{contact.full_name}</h1>
-          <p className="text-muted-foreground">{contact.title}</p>
+          <h1 className="font-display text-4xl text-foreground">{contact.full_name}</h1>
+          <p className="text-sub text-muted-foreground">{contact.title}</p>
           {contact.company_name && (
             <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
               <Building2 className="h-4 w-4" />
@@ -132,14 +166,14 @@ export default function ContactDetailPage({
                 </a>
               </Button>
             )}
-            <Button size="sm">
+            <Button size="sm" onClick={handleRequestIntro}>
               <Send className="mr-1 h-3 w-3" />
               Request intro
             </Button>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-primary">{contact.strength_score}%</div>
+          <div className="font-display text-2xl text-primary">{contact.strength_score}%</div>
           <p className="text-xs text-muted-foreground">Relationship strength</p>
         </div>
       </div>
