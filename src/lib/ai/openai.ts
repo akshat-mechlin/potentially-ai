@@ -2,9 +2,10 @@ import OpenAI from "openai";
 import { z } from "zod";
 import type { SearchResult, SearchResultContact, OutreachResult } from "@/types";
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const openai =
+  process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.startsWith("sk-your")
+    ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    : null;
 
 export const searchResultSchema = z.object({
   contacts: z.array(
@@ -94,7 +95,17 @@ Return JSON matching: { contacts: [...], summary: string, suggested_actions: str
   });
 
   const parsed = JSON.parse(response.choices[0].message.content || "{}");
-  return searchResultSchema.parse(parsed);
+  const validated = searchResultSchema.safeParse(parsed);
+
+  if (validated.success) {
+    return validated.data;
+  }
+
+  return {
+    contacts: parsed.contacts ?? generateMockSearchResult(query, contacts).contacts,
+    summary: parsed.summary ?? `Found contacts matching "${query}".`,
+    suggested_actions: parsed.suggested_actions ?? [],
+  };
 }
 
 export async function generateOutreach(params: {

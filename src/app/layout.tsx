@@ -1,9 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Serif_Display, Fira_Sans, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
-import { ThemeProvider } from "@/components/theme-provider";
-import { CompactModeSync } from "@/components/layout/compact-mode-sync";
-import { PwaRegister } from "@/components/pwa/pwa-register";
+import { SplashStatic } from "@/components/pwa/splash-static";
 import "./globals.css";
 
 const firaSans = Fira_Sans({
@@ -46,8 +44,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#4A6741" },
-    { media: "(prefers-color-scheme: dark)", color: "#3D5C36" },
+    { media: "(prefers-color-scheme: light)", color: "#2D4739" },
+    { media: "(prefers-color-scheme: dark)", color: "#1A2820" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -67,11 +65,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className={`${firaSans.className} antialiased`} suppressHydrationWarning>
-        <ThemeProvider>
-          <CompactModeSync />
-          <PwaRegister />
-          <Providers>{children}</Providers>
-        </ThemeProvider>
+        <SplashStatic />
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

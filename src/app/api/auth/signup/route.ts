@@ -9,6 +9,7 @@ const signupSchema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email(),
   password: z.string().min(8).max(128),
+  invite: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -18,9 +19,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, email, password } = signupSchema.parse(body);
+    const { name, email, password, invite } = signupSchema.parse(body);
     const supabase = createAdminClient();
-    const redirectTo = `${getAppUrl()}/api/auth/callback?next=/dashboard`;
+    const redirectTo = invite
+      ? `${getAppUrl()}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
+      : `${getAppUrl()}/api/auth/callback?next=/dashboard`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
@@ -49,7 +52,17 @@ export async function POST(request: Request) {
     }
 
     const template = signupVerificationEmail(name, actionLink);
-    await sendEmail({ to: email, subject: template.subject, html: template.html });
+    const emailResult = await sendEmail({ to: email, subject: template.subject, html: template.html });
+
+    if (emailResult && "skipped" in emailResult && emailResult.skipped) {
+      console.warn("[signup] Verification link (email not sent):", actionLink);
+      return NextResponse.json({
+        success: true,
+        emailSkipped: true,
+        message:
+          "Account created, but no verification email was sent. Add RESEND_API_KEY to .env, or use the link logged in your dev server terminal.",
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -57,7 +70,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: "Invalid request", details: error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
     console.error("Signup email failed:", error);
     const message = error instanceof Error ? error.message : "Signup failed";

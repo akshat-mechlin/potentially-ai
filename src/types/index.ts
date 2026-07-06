@@ -34,6 +34,11 @@ export interface Workspace {
   updated_at: string;
 }
 
+export interface WorkspaceSummary extends Workspace {
+  role: WorkspaceRole;
+  member_count: number;
+}
+
 export interface WorkspaceMember {
   id: string;
   workspace_id: string;
@@ -130,6 +135,8 @@ export interface SearchResultContact {
   reason: string;
   warm_intro_path: string[];
   recommended_action: string;
+  network_owner_name?: string | null;
+  group_name?: string | null;
 }
 
 export interface OAuthConnection {
@@ -217,6 +224,7 @@ export interface DashboardStats {
   recent_searches: number;
   introductions_success: number;
   ai_usage_tokens: number;
+  activity?: Array<{ id: string; event: string; time: string; created_at: string }>;
 }
 
 export interface AnalyticsData {
@@ -225,3 +233,5 @@ export interface AnalyticsData {
   workspace_growth: { date: string; contacts: number }[];
   engagement: { type: string; count: number }[];
 }
+
+export * from "./playbooks";

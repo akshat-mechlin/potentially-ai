@@ -1,7 +1,7 @@
 import { isDataDemoMode } from "@/lib/app-config";
 import { DEMO_COMPANIES, DEMO_CONTACTS } from "@/lib/demo-data";
 import type { GraphData } from "@/types";
-import { getUserWorkspaceContext } from "./workspace";
+import { getUserWorkspaceContext, listUserWorkspaces } from "./workspace";
 import { findShortestPath, pathToNames } from "@/lib/graph-utils";
 
 export { findShortestPath, pathToNames };
@@ -11,8 +11,13 @@ export async function getGraphData(): Promise<GraphData> {
     return buildDemoGraph();
   }
 
-  const { supabase, user, workspaceId, profile } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) {
+  const { supabase, user, profile } = await getUserWorkspaceContext();
+  if (!supabase || !user) {
+    return { nodes: [], links: [] };
+  }
+
+  const workspaceIds = (await listUserWorkspaces(supabase)).map((workspace) => workspace.id);
+  if (!workspaceIds.length) {
     return { nodes: [], links: [] };
   }
 
@@ -20,12 +25,12 @@ export async function getGraphData(): Promise<GraphData> {
     supabase
       .from("contacts")
       .select("id, full_name, strength_score, company_id")
-      .eq("workspace_id", workspaceId),
-    supabase.from("companies").select("id, name").eq("workspace_id", workspaceId),
+      .in("workspace_id", workspaceIds),
+    supabase.from("companies").select("id, name").in("workspace_id", workspaceIds),
     supabase
       .from("relationship_events")
       .select("type, contact_a, contact_b")
-      .eq("workspace_id", workspaceId)
+      .in("workspace_id", workspaceIds)
       .in("type", ["mutual_connection", "introduction"]),
   ]);
 

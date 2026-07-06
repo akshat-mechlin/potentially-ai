@@ -1,19 +1,35 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DesktopOnly, MobileSegmented } from "@/components/mobile/primitives";
+import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
+const FLAG_LABELS: Record<string, string> = {
+  ai_search: "AI-powered network search",
+  graph_view: "Interactive network graph",
+  outreach_engine: "AI outreach message generation",
+  team_collaboration: "Group invites and team features",
+  beta_connectors: "Beta connector integrations",
+  billing_enforcement: "Enforce plan limits on search and imports",
+};
+
 type AdminData = {
   users: Array<{ name: string; email: string; workspaces: number; admin: boolean }>;
   workspaces: Array<{ name: string; members: number; plan: string; contacts: number }>;
-  featureFlags: Array<{ key: string; enabled: boolean }>;
+  featureFlags: Array<{ key: string; enabled: boolean; description?: string | null }>;
 };
+
+type AdminTab = "users" | "groups" | "flags";
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
+  const { isMobileApp } = useMobileApp();
+  const [activeTab, setActiveTab] = useState<AdminTab>("flags");
 
   const { data, isLoading, error } = useQuery<AdminData>({
     queryKey: ["admin"],
@@ -59,70 +75,152 @@ export default function AdminPage() {
     );
   }
 
+  const usersPanel = isMobileApp ? (
+    <div className="mobile-menu-list">
+      {data?.users.map((user) => (
+        <div key={user.email} className="mobile-list-row">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{user.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {user.admin && <Badge className="text-[10px]">Admin</Badge>}
+            <span className="text-[10px] text-muted-foreground">{user.workspaces} groups</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Users</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {data?.users.map((user) => (
+          <div key={user.email} className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">{user.name}</p>
+              <p className="text-xs text-muted-foreground">{user.email}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {user.admin && <Badge>Admin</Badge>}
+              <span className="text-xs text-muted-foreground">{user.workspaces} groups</span>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+
+  const groupsPanel = isMobileApp ? (
+    <div className="mobile-menu-list">
+      {data?.workspaces.map((ws) => (
+        <div key={ws.name} className="mobile-list-row">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{ws.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {ws.members} members · {ws.contacts} contacts
+            </p>
+          </div>
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {ws.plan}
+          </Badge>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Groups</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {data?.workspaces.map((ws) => (
+          <div key={ws.name} className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">{ws.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {ws.members} members · {ws.contacts} contacts
+              </p>
+            </div>
+            <Badge variant="outline">{ws.plan}</Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+
+  const flagsPanel = isMobileApp ? (
+    <div className="mobile-menu-list">
+      {data?.featureFlags.map((flag) => (
+        <div key={flag.key} className="mobile-list-row items-start gap-3 py-3">
+          <div className="min-w-0 flex-1">
+            <code className="text-xs">{flag.key}</code>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {flag.description ?? FLAG_LABELS[flag.key] ?? "No description"}
+            </p>
+          </div>
+          <Switch
+            checked={flag.enabled}
+            onCheckedChange={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
+          />
+        </div>
+      ))}
+    </div>
+  ) : (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Feature Flags</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {data?.featureFlags.map((flag) => (
+          <div key={flag.key} className="flex items-center justify-between gap-4">
+            <div>
+              <code className="text-sm">{flag.key}</code>
+              <p className="text-xs text-muted-foreground">
+                {flag.description ?? FLAG_LABELS[flag.key] ?? "No description"}
+              </p>
+            </div>
+            <Switch
+              checked={flag.enabled}
+              onCheckedChange={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
+            />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+
+  if (isMobileApp) {
+    return (
+      <div className="space-y-4 pb-24">
+        <MobileSegmented
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: "flags", label: "Flags" },
+            { value: "users", label: "Users" },
+            { value: "groups", label: "Groups" },
+          ]}
+        />
+        {activeTab === "users" && usersPanel}
+        {activeTab === "groups" && groupsPanel}
+        {activeTab === "flags" && flagsPanel}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-4xl text-foreground">Admin Panel</h1>
-        <p className="text-muted-foreground">Manage users, workspaces, and feature flags</p>
-      </div>
+      <DesktopOnly>
+        <p className="text-sub text-muted-foreground">Manage users, groups, and feature flags</p>
+      </DesktopOnly>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Users</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data?.users.map((user) => (
-              <div key={user.email} className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm font-medium">{user.name}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {user.admin && <Badge>Admin</Badge>}
-                  <span className="text-xs text-muted-foreground">{user.workspaces} workspaces</span>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Workspaces</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data?.workspaces.map((ws) => (
-              <div key={ws.name} className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <p className="text-sm font-medium">{ws.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {ws.members} members · {ws.contacts} contacts
-                  </p>
-                </div>
-                <Badge variant="outline">{ws.plan}</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {usersPanel}
+        {groupsPanel}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Feature Flags</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {data?.featureFlags.map((flag) => (
-            <div key={flag.key} className="flex items-center justify-between">
-              <code className="text-sm">{flag.key}</code>
-              <Switch
-                checked={flag.enabled}
-                onCheckedChange={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
-              />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {flagsPanel}
     </div>
   );
 }

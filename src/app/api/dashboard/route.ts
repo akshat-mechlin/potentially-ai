@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isDataDemoMode } from "@/lib/app-config";
+import { getRecentActivity } from "@/lib/data/activity";
 import { getDemoDashboardStats } from "@/lib/demo-store";
 import { listContacts } from "@/lib/data/contacts";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +21,7 @@ export async function GET() {
     }
 
     const contacts = await listContacts();
+    const activity = await getRecentActivity(8);
 
     const { count: searchCount } = await supabase
       .from("search_history")
@@ -37,6 +39,7 @@ export async function GET() {
       recent_searches: searchCount ?? 0,
       introductions_success: introCount ?? 0,
       ai_usage_tokens: 0,
+      activity,
     });
   } catch (error) {
     console.error("Dashboard stats failed:", error);

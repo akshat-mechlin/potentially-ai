@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isDataDemoMode } from "@/lib/app-config";
 import { createDemoWorkspace, getDemoWorkspaces } from "@/lib/demo-store";
+import { listUserWorkspaces } from "@/lib/data/workspace";
 import { createClient } from "@/lib/supabase/server";
+import { safeGetUser } from "@/lib/supabase/auth";
 
 const workspaceSchema = z.object({
   name: z.string().min(1).max(100),
@@ -14,26 +16,7 @@ export async function GET() {
       return NextResponse.json({ workspaces: getDemoWorkspaces() });
     }
 
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { data, error } = await supabase
-      .from("workspace_members")
-      .select("workspace:workspaces(*)")
-      .eq("user_id", user.id);
-
-    if (error) throw error;
-
-    const workspaces = (data ?? [])
-      .map((row) => row.workspace)
-      .filter(Boolean);
-
+    const workspaces = await listUserWorkspaces();
     return NextResponse.json({ workspaces });
   } catch (error) {
     console.error("Failed to list workspaces:", error);
@@ -52,13 +35,14 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { user } = await safeGetUser(supabase);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { getUserWorkspaceContext } = await import("@/lib/data/workspace");
+    await getUserWorkspaceContext(supabase);
 
     const { data: workspace, error: wsError } = await supabase.rpc("create_workspace_with_owner", {
       workspace_name: name,

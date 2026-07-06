@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { importContacts, listContacts } from "@/lib/data/contacts";
+import { markCustomDataImported } from "@/lib/data/connectors";
 
 const importSchema = z.object({
   contacts: z.array(
@@ -11,14 +12,16 @@ const importSchema = z.object({
       company_name: z.string().optional(),
     }),
   ),
+  file_name: z.string().optional(),
 });
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { contacts } = importSchema.parse(body);
+    const { contacts, file_name } = importSchema.parse(body);
 
     const result = await importContacts(contacts);
+    await markCustomDataImported(result.imported, file_name);
 
     return NextResponse.json({
       ...result,

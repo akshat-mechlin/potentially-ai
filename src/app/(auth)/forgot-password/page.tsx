@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthShell>
       <CardHeader className="space-y-1 p-0 text-center">
-        <CardTitle className="font-display text-4xl text-foreground">Reset password</CardTitle>
+        <CardTitle className="font-display text-2xl text-foreground">Reset password</CardTitle>
         <CardDescription>
           {sent ? "Check your email for a reset link" : "Enter your email to receive a reset link"}
         </CardDescription>

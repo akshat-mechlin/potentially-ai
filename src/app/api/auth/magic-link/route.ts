@@ -7,6 +7,7 @@ import { isDemoMode } from "@/lib/app-config";
 
 const schema = z.object({
   email: z.string().email(),
+  invite: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -16,9 +17,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { email } = schema.parse(body);
+    const { email, invite } = schema.parse(body);
     const supabase = createAdminClient();
-    const redirectTo = `${getAppUrl()}/api/auth/callback?next=/dashboard`;
+    const redirectTo = invite
+      ? `${getAppUrl()}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
+      : `${getAppUrl()}/api/auth/callback?next=/dashboard`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "magiclink",

@@ -10,10 +10,12 @@ export async function getAdminData() {
       ],
       workspaces: [{ name: "Acme Ventures", members: 1, plan: "pro", contacts: 3 }],
       featureFlags: [
-        { key: "ai_search", enabled: true },
-        { key: "graph_view", enabled: true },
-        { key: "outreach_engine", enabled: true },
-        { key: "team_collaboration", enabled: true },
+        { key: "ai_search", enabled: true, description: "AI-powered network search" },
+        { key: "graph_view", enabled: true, description: "Interactive network graph" },
+        { key: "outreach_engine", enabled: true, description: "AI outreach message generation" },
+        { key: "team_collaboration", enabled: true, description: "Group invites and team features" },
+        { key: "beta_connectors", enabled: false, description: "Beta connector integrations" },
+        { key: "billing_enforcement", enabled: true, description: "Enforce plan limits on search and imports" },
       ],
     };
   }
@@ -27,7 +29,7 @@ export async function getAdminData() {
       ascending: false,
     }),
     supabase.from("workspaces").select("id, name, plan"),
-    supabase.from("feature_flags").select("key, enabled"),
+    supabase.from("feature_flags").select("key, enabled, description"),
   ]);
 
   const workspaceRows = await Promise.all(

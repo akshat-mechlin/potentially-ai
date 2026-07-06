@@ -53,11 +53,13 @@ interface UIState {
   commandMenuOpen: boolean;
   compactMode: boolean;
   mobileMoreOpen: boolean;
+  mobileHeaderTitle: string | null;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setCommandMenuOpen: (open: boolean) => void;
   setCompactMode: (compact: boolean) => void;
   setMobileMoreOpen: (open: boolean) => void;
+  setMobileHeaderTitle: (title: string | null) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -67,11 +69,13 @@ export const useUIStore = create<UIState>()(
       commandMenuOpen: false,
       compactMode: false,
       mobileMoreOpen: false,
+      mobileHeaderTitle: null,
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),
       setCompactMode: (compactMode) => set({ compactMode }),
       setMobileMoreOpen: (open) => set({ mobileMoreOpen: open }),
+      setMobileHeaderTitle: (mobileHeaderTitle) => set({ mobileHeaderTitle }),
     }),
     {
       name: "potentially-ui",

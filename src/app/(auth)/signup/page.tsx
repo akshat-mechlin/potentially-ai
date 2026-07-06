@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,8 +29,10 @@ const signupSchema = z
 
 type SignupForm = z.infer<typeof signupSchema>;
 
-export default function SignupPage() {
+function SignupFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
   const [loading, setLoading] = useState(false);
 
   const {
@@ -57,13 +59,16 @@ export default function SignupPage() {
           name: data.name,
           email: data.email,
           password: data.password,
+          ...(invite ? { invite } : {}),
         }),
       });
 
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Signup failed");
 
-      toast.success(result.message || "Check your email to verify your account");
+      toast.success(result.message || "Check your email to verify your account", {
+        duration: result.emailSkipped ? 8000 : 4000,
+      });
       router.push("/login");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Signup failed");
@@ -75,7 +80,7 @@ export default function SignupPage() {
   return (
     <AuthShell step={1} totalSteps={1} stepLabel="Welcome">
       <CardHeader className="space-y-1 p-0 text-center">
-        <CardTitle className="font-display text-4xl text-foreground">Create your account</CardTitle>
+        <CardTitle className="font-display text-2xl text-foreground">Create your account</CardTitle>
         <CardDescription>Start building your relationship intelligence</CardDescription>
       </CardHeader>
       <CardContent className="p-0 pt-6">
@@ -118,5 +123,13 @@ export default function SignupPage() {
           </p>
         </CardContent>
     </AuthShell>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupFormContent />
+    </Suspense>
   );
 }

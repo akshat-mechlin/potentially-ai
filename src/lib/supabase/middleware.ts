@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isDemoMode } from "@/lib/app-config";
+import { safeGetUser } from "@/lib/supabase/auth";
 
 export async function updateSession(request: NextRequest) {
   if (isDemoMode()) {
@@ -28,9 +29,7 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, networkError } = await safeGetUser(supabase);
 
   const protectedPaths = [
     "/dashboard",
@@ -38,7 +37,9 @@ export async function updateSession(request: NextRequest) {
     "/network",
     "/intros",
     "/contacts",
+    "/groups",
     "/workspace",
+    "/connectors",
     "/analytics",
     "/settings",
     "/admin",
@@ -48,7 +49,7 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith(path),
   );
 
-  if (isProtected && !user) {
+  if (isProtected && !user && !networkError) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", request.nextUrl.pathname);

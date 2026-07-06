@@ -1,8 +1,9 @@
 "use client";
 
-import { use, useState } from "react";
+import { Suspense, use, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
@@ -13,6 +14,13 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Contact, OutreachResult } from "@/types";
+import { MobileHeaderTitle } from "@/components/layout/mobile-header-title";
+import {
+  DesktopOnly,
+  MobileKpiStrip,
+  MobileSegmented,
+} from "@/components/mobile/primitives";
+import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -28,12 +36,26 @@ import {
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 
-export default function ContactDetailPage({
+type ContactTab = "overview" | "timeline" | "outreach";
+
+export default function ContactDetailPage(props: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading contact...</p>}>
+      <ContactDetailContent {...props} />
+    </Suspense>
+  );
+}
+
+function ContactDetailContent({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const defaultTab: ContactTab = searchParams.get("tab") === "outreach" ? "outreach" : "overview";
+  const { isMobileApp } = useMobileApp();
+  const [activeTab, setActiveTab] = useState<ContactTab>(defaultTab);
   const [outreachType, setOutreachType] = useState<"cold_email" | "warm_intro" | "linkedin">(
     "cold_email",
   );
@@ -129,21 +151,208 @@ export default function ContactDetailPage({
     { type: "linkedin", title: "Connected on LinkedIn", date: contact.created_at },
   ];
 
+  const outreachForm = (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Type</label>
+          <Select value={outreachType} onValueChange={(v) => setOutreachType(v as typeof outreachType)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cold_email">Cold Email</SelectItem>
+              <SelectItem value="warm_intro">Warm Intro</SelectItem>
+              <SelectItem value="linkedin">LinkedIn Message</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Tone</label>
+          <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="professional">Professional</SelectItem>
+              <SelectItem value="casual">Casual</SelectItem>
+              <SelectItem value="friendly">Friendly</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Goal</label>
+        <Textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} />
+      </div>
+      <Button onClick={handleGenerateOutreach} disabled={generating} className={isMobileApp ? "w-full rounded-xl" : undefined}>
+        {generating ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Sparkles className="mr-2 h-4 w-4" />
+        )}
+        Generate
+      </Button>
+      {outreach && (
+        <div className={`space-y-3 rounded-xl bg-muted/30 p-4 ${isMobileApp ? "mobile-card-flat" : "border"}`}>
+          {outreach.subject && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Subject</p>
+              <p className="text-sm font-medium">{outreach.subject}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Body</p>
+            <p className="whitespace-pre-wrap text-sm">{outreach.body}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">CTA</p>
+            <p className="text-sm">{outreach.cta}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  if (isMobileApp) {
+    return (
+      <>
+        <MobileHeaderTitle title={contact.full_name} />
+        <div className="space-y-4 pb-24">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-14 w-14 shrink-0">
+              <AvatarFallback className="text-base">{getInitials(contact.full_name)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-muted-foreground">{contact.title}</p>
+              {contact.company_name && (
+                <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />
+                  {contact.company_name}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {contact.email && (
+                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs">
+                    <Mail className="mr-1 h-3 w-3" />
+                    Email
+                  </Button>
+                )}
+                {contact.linkedin_url && (
+                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs" asChild>
+                    <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-1 h-3 w-3" />
+                      LinkedIn
+                    </a>
+                  </Button>
+                )}
+                <Button size="sm" className="h-8 rounded-full px-3 text-xs" onClick={handleRequestIntro}>
+                  <Send className="mr-1 h-3 w-3" />
+                  Intro
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <MobileKpiStrip
+            items={[{ label: "Strength", value: `${contact.strength_score}%`, icon: Sparkles }]}
+          />
+
+          <MobileSegmented
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              { value: "overview", label: "Overview" },
+              { value: "timeline", label: "Timeline" },
+              { value: "outreach", label: "Outreach" },
+            ]}
+          />
+
+          {activeTab === "overview" && (
+            <div className="space-y-3">
+              <div className="mobile-card-flat space-y-2 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  AI Summary
+                </p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+              </div>
+
+              {mutualContacts.length > 0 && (
+                <div className="mobile-menu-list">
+                  <p className="mobile-section-label px-1">Mutual connections</p>
+                  {mutualContacts.map((c) => (
+                    <Link key={c.id} href={`/contacts/${c.id}`} className="mobile-menu-item">
+                      <span className="mobile-menu-item-icon-muted">
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="text-[10px]">{getInitials(c.full_name)}</AvatarFallback>
+                        </Avatar>
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{c.full_name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{c.title}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {contact.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-1">
+                  {contact.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-muted px-3 py-1 text-xs font-medium"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "timeline" && (
+            <div className="mobile-menu-list">
+              {timelineEvents.map((event) => (
+                <div key={event.title} className="mobile-list-row">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{event.title}</p>
+                    <p className="text-xs capitalize text-muted-foreground">{event.type}</p>
+                  </div>
+                  {event.date && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatRelativeTime(event.date)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === "outreach" && (
+            <div className="mobile-card-flat p-4">{outreachForm}</div>
+          )}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" asChild>
-        <Link href="/contacts">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Link>
-      </Button>
+      <DesktopOnly>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/contacts">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Link>
+        </Button>
+      </DesktopOnly>
 
       <div className="flex items-start gap-6">
         <Avatar className="h-16 w-16">
           <AvatarFallback className="text-lg">{getInitials(contact.full_name)}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <h1 className="font-display text-4xl text-foreground">{contact.full_name}</h1>
+          <h1 className="font-display text-2xl text-foreground sm:text-3xl">{contact.full_name}</h1>
           <p className="text-sub text-muted-foreground">{contact.title}</p>
           {contact.company_name && (
             <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
@@ -178,7 +387,7 @@ export default function ContactDetailPage({
         </div>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={defaultTab} key={defaultTab}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
@@ -260,67 +469,7 @@ export default function ContactDetailPage({
             <CardHeader>
               <CardTitle className="text-base">Generate Outreach</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Type</label>
-                  <Select value={outreachType} onValueChange={(v) => setOutreachType(v as typeof outreachType)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cold_email">Cold Email</SelectItem>
-                      <SelectItem value="warm_intro">Warm Intro</SelectItem>
-                      <SelectItem value="linkedin">LinkedIn Message</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Tone</label>
-                  <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="professional">Professional</SelectItem>
-                      <SelectItem value="casual">Casual</SelectItem>
-                      <SelectItem value="friendly">Friendly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Goal</label>
-                <Textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} />
-              </div>
-              <Button onClick={handleGenerateOutreach} disabled={generating}>
-                {generating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
-                )}
-                Generate
-              </Button>
-
-              {outreach && (
-                <div className="mt-4 space-y-3 rounded-lg border bg-muted/30 p-4">
-                  {outreach.subject && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Subject</p>
-                      <p className="text-sm font-medium">{outreach.subject}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">Body</p>
-                    <p className="whitespace-pre-wrap text-sm">{outreach.body}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground">CTA</p>
-                    <p className="text-sm">{outreach.cta}</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
+            <CardContent>{outreachForm}</CardContent>
           </Card>
         </TabsContent>
       </Tabs>

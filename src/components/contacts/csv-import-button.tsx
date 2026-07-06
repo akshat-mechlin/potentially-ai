@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -49,7 +49,17 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function CsvImportButton() {
+export function CsvImportButton({
+  variant = "default",
+  size = "default",
+  label = "Import CSV",
+  onImported,
+}: {
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+  label?: string;
+  onImported?: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -102,13 +112,14 @@ export function CsvImportButton() {
       const res = await fetch("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contacts }),
+        body: JSON.stringify({ contacts, file_name: selectedFile.name }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Import failed");
 
       await queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      onImported?.();
       toast.success(data.message);
       handleOpenChange(false);
     } catch (error) {
@@ -127,9 +138,9 @@ export function CsvImportButton() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button>
+        <Button variant={variant} size={size}>
           <Upload className="mr-2 h-4 w-4" />
-          Import CSV
+          {label}
         </Button>
       </DialogTrigger>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-md">

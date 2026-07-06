@@ -1,6 +1,6 @@
 import { isDataDemoMode } from "@/lib/app-config";
 import type { AnalyticsData } from "@/types";
-import { getUserWorkspaceContext } from "./workspace";
+import { getUserWorkspaceContext, listUserWorkspaces } from "./workspace";
 import { format, subDays, startOfMonth, subMonths } from "date-fns";
 
 function demoAnalytics(): AnalyticsData {
@@ -41,8 +41,11 @@ function demoAnalytics(): AnalyticsData {
 export async function getAnalyticsData(): Promise<AnalyticsData> {
   if (isDataDemoMode()) return demoAnalytics();
 
-  const { supabase, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !workspaceId) return demoAnalytics();
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) return demoAnalytics();
+
+  const workspaceIds = (await listUserWorkspaces(supabase)).map((workspace) => workspace.id);
+  if (!workspaceIds.length) return demoAnalytics();
 
   const weekAgo = subDays(new Date(), 7).toISOString();
 
@@ -55,22 +58,23 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     supabase
       .from("search_history")
       .select("created_at")
-      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .in("workspace_id", workspaceIds)
       .gte("created_at", weekAgo),
     supabase
       .from("contacts")
       .select("full_name, strength_score")
-      .eq("workspace_id", workspaceId)
+      .in("workspace_id", workspaceIds)
       .order("strength_score", { ascending: false })
       .limit(5),
     supabase
       .from("relationship_events")
       .select("type")
-      .eq("workspace_id", workspaceId),
+      .in("workspace_id", workspaceIds),
     supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId),
+      .in("workspace_id", workspaceIds),
   ]);
 
   const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -102,7 +106,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     const { count } = await supabase
       .from("contacts")
       .select("*", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId)
+      .in("workspace_id", workspaceIds)
       .lte("created_at", monthStart.toISOString());
 
     growth.push({

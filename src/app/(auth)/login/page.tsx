@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,8 +23,21 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+async function joinGroupFromInvite(invite: string) {
+  const res = await fetch("/api/groups/join", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invite }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to join group");
+  return data;
+}
+
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invite = searchParams.get("invite");
   const [loading, setLoading] = useState(false);
 
   const {
@@ -35,12 +48,26 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  const finishLogin = async () => {
+    if (invite) {
+      try {
+        const result = await joinGroupFromInvite(invite);
+        toast.success(result.message || "Joined group");
+        router.push("/groups");
+        return;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not join group");
+      }
+    }
+    router.push("/dashboard");
+  };
+
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
     try {
       if (isDemoMode()) {
         toast.success("Welcome back! (Demo mode)");
-        router.push("/dashboard");
+        await finishLogin();
         return;
       }
 
@@ -51,7 +78,7 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      router.push("/dashboard");
+      await finishLogin();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Login failed");
     } finally {
@@ -62,21 +89,25 @@ export default function LoginPage() {
   const handleOAuth = async (provider: "google" | "azure") => {
     if (isDemoMode()) {
       toast.success(`Signed in with ${provider} (Demo mode)`);
-      router.push("/dashboard");
+      await finishLogin();
       return;
     }
 
     const supabase = createClient();
+    const redirectTo = invite
+      ? `${window.location.origin}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
+      : `${window.location.origin}/api/auth/callback?next=/dashboard`;
+
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/api/auth/callback` },
+      options: { redirectTo },
     });
   };
 
   const handleMagicLink = async (email: string) => {
     if (isDemoMode()) {
       toast.success("Magic link sent! (Demo mode: redirecting)");
-      router.push("/dashboard");
+      await finishLogin();
       return;
     }
 
@@ -84,7 +115,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, ...(invite ? { invite } : {}) }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Failed to send magic link");
@@ -97,73 +128,88 @@ export default function LoginPage() {
   return (
     <AuthShell step={1} totalSteps={1} stepLabel="Sign in">
       <CardHeader className="space-y-1 p-0 text-center">
-        <CardTitle className="font-display text-4xl text-foreground">Welcome back</CardTitle>
-        <CardDescription>Sign in to your relationship intelligence workspace</CardDescription>
+        <CardTitle className="font-display text-2xl text-foreground">Welcome back</CardTitle>
+        <CardDescription>
+          {invite
+            ? "Sign in to join the group you were invited to"
+            : "Sign in to your relationship intelligence workspace"}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-0 pt-6">
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" onClick={() => handleOAuth("google")}>
-              Google
-            </Button>
-            <Button variant="outline" onClick={() => handleOAuth("azure")}>
-              Microsoft
-            </Button>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="you@company.com" {...register("email")} />
-              {errors.email && (
-                <p className="text-xs text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-              <Input id="password" type="password" {...register("password")} />
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sign in
-            </Button>
-          </form>
-
-          <Button
-            variant="ghost"
-            className="w-full text-sm"
-            onClick={() => {
-              const email = (document.getElementById("email") as HTMLInputElement)?.value;
-              if (email) handleMagicLink(email);
-              else toast.error("Enter your email first");
-            }}
-          >
-            Send magic link instead
+        <div className="grid grid-cols-2 gap-3">
+          <Button variant="outline" onClick={() => handleOAuth("google")}>
+            Google
           </Button>
+          <Button variant="outline" onClick={() => handleOAuth("azure")}>
+            Microsoft
+          </Button>
+        </div>
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </p>
-        </CardContent>
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" placeholder="you@company.com" {...register("email")} />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email.message}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+            <Input id="password" type="password" {...register("password")} />
+            {errors.password && (
+              <p className="text-xs text-destructive">{errors.password.message}</p>
+            )}
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sign in
+          </Button>
+        </form>
+
+        <Button
+          variant="ghost"
+          className="w-full text-sm"
+          onClick={() => {
+            const email = (document.getElementById("email") as HTMLInputElement)?.value;
+            if (email) handleMagicLink(email);
+            else toast.error("Enter your email first");
+          }}
+        >
+          Send magic link instead
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            href={invite ? `/signup?invite=${encodeURIComponent(invite)}` : "/signup"}
+            className="text-primary hover:underline"
+          >
+            Sign up
+          </Link>
+        </p>
+      </CardContent>
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginFormContent />
+    </Suspense>
   );
 }

@@ -1,0 +1,794 @@
+import { isDataDemoMode } from "@/lib/app-config";
+import {
+  getDemoPlaybooks,
+  createDemoPlaybook,
+  getDemoPlaybook,
+  updateDemoPlaybook,
+  createDemoRun,
+  getDemoRun,
+  getDemoRunProspects,
+  updateDemoProspect,
+} from "@/lib/demo-store/playbooks";
+import { listContacts } from "@/lib/data/contacts";
+import { logAuditEvent } from "@/lib/data/audit";
+import { getUserWorkspaceContext } from "@/lib/data/workspace";
+import { scoreAllContactsForPlaybook } from "@/lib/playbooks/matching";
+import { generateOutreach } from "@/lib/ai/openai";
+import type {
+  IcpProfile,
+  MatchingConfig,
+  Playbook,
+  PlaybookProspect,
+  PlaybookRun,
+  SendConfig,
+} from "@/types/playbooks";
+import type { AutomationLevel, OutreachMode, PlaybookStatus } from "@/types/playbooks";
+
+const defaultIcp: IcpProfile = {
+  title_include: [],
+  keywords_must: [],
+  keywords_nice: [],
+  min_strength_score: 20,
+};
+
+const defaultMatching: MatchingConfig = {
+  min_score: 40,
+  warm_path_weight: 1,
+  dedupe_across_playbooks: true,
+  cooldown_days: 30,
+};
+
+export async function listPlaybooks(workspaceId?: string | null): Promise<Playbook[]> {
+  if (isDataDemoMode()) return getDemoPlaybooks();
+
+  const { supabase, workspaceId: activeId } = await getUserWorkspaceContext(undefined, workspaceId);
+  const targetId = workspaceId ?? activeId;
+  if (!supabase || !targetId) return [];
+
+  const { data, error } = await supabase
+    .from("playbooks")
+    .select("*")
+    .eq("workspace_id", targetId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as Playbook[];
+}
+
+export async function getPlaybook(id: string): Promise<Playbook | null> {
+  if (isDataDemoMode()) return getDemoPlaybook(id);
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.from("playbooks").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return (data as Playbook) ?? null;
+}
+
+export async function createPlaybook(input: {
+  name: string;
+  description?: string;
+  goal?: string;
+  workspaceId?: string | null;
+}) {
+  if (isDataDemoMode()) {
+    return createDemoPlaybook(input.name, input.description, input.goal);
+  }
+
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext(undefined, input.workspaceId);
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+
+  const { data, error } = await supabase
+    .from("playbooks")
+    .insert({
+      workspace_id: workspaceId,
+      created_by: user.id,
+      name: input.name,
+      description: input.description ?? null,
+      goal: input.goal ?? null,
+      icp_profile: defaultIcp,
+      matching_config: defaultMatching,
+      send_config: { include_unsubscribe: true, skip_weekends: true },
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  await logAuditEvent("playbook.created", "playbook", data.id, { name: input.name });
+  return data as Playbook;
+}
+
+export async function updatePlaybook(
+  id: string,
+  updates: Partial<{
+    name: string;
+    description: string;
+    goal: string;
+    status: PlaybookStatus;
+    automation_level: AutomationLevel;
+    outreach_mode: OutreachMode;
+    tone: string;
+    icp_profile: IcpProfile;
+    matching_config: MatchingConfig;
+    send_config: SendConfig;
+    template_id: string | null;
+    calendly_url?: string | null;
+  }>,
+) {
+  if (isDataDemoMode()) return updateDemoPlaybook(id, updates);
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  const { data, error } = await supabase
+    .from("playbooks")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as Playbook;
+}
+
+async function getActivePlaybookContactIds(supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>) {
+  const { data: runs } = await supabase
+    .from("playbook_runs")
+    .select("id")
+    .in("status", ["review", "finalized", "executing"]);
+
+  const runIds = (runs ?? []).map((r) => r.id);
+  if (!runIds.length) return new Set<string>();
+
+  const { data } = await supabase
+    .from("playbook_run_contacts")
+    .select("contact_id")
+    .in("run_id", runIds)
+    .in("status", ["selected", "queued", "pending_approval", "sent"]);
+
+  return new Set((data ?? []).map((row) => row.contact_id as string));
+}
+
+async function getDoNotContactIds(supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>) {
+  const { data } = await supabase
+    .from("contact_preferences")
+    .select("contact_id")
+    .or("do_not_contact.eq.true,unsubscribed_at.not.is.null");
+
+  return new Set((data ?? []).map((row) => row.contact_id as string));
+}
+
+async function getLastContactedMap(supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>) {
+  const { data } = await supabase.from("contact_preferences").select("contact_id, last_contacted_at");
+  return new Map(
+    (data ?? []).map((row) => [row.contact_id as string, row.last_contacted_at as string | null]),
+  );
+}
+
+async function touchContactLastContacted(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  contactId: string,
+) {
+  await supabase.from("contact_preferences").upsert({
+    contact_id: contactId,
+    last_contacted_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function incrementRunSentCount(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  runId: string,
+) {
+  const { data: run } = await supabase.from("playbook_runs").select("stats").eq("id", runId).maybeSingle();
+  const stats = (run?.stats ?? {}) as Record<string, number>;
+  await supabase
+    .from("playbook_runs")
+    .update({
+      status: "executing",
+      stats: { ...stats, sent: (stats.sent ?? 0) + 1 },
+    })
+    .eq("id", runId);
+
+  await maybeCompleteRun(supabase, runId);
+}
+
+async function maybeCompleteRun(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  runId: string,
+) {
+  const { data: open } = await supabase
+    .from("playbook_run_contacts")
+    .select("id")
+    .eq("run_id", runId)
+    .in("status", ["matched", "selected", "pending_approval", "queued"]);
+
+  if ((open ?? []).length > 0) return;
+
+  await supabase
+    .from("playbook_runs")
+    .update({ status: "completed", completed_at: new Date().toISOString() })
+    .eq("id", runId);
+}
+
+export async function deployPlaybookRun(playbookId: string, options?: { segmentId?: string; dryRun?: boolean }) {
+  if (isDataDemoMode()) {
+    return createDemoRun(playbookId, options?.segmentId, options?.dryRun ?? false);
+  }
+
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+
+  const playbook = await getPlaybook(playbookId);
+  if (!playbook) throw new Error("Playbook not found");
+
+  const { data: run, error: runError } = await supabase
+    .from("playbook_runs")
+    .insert({
+      playbook_id: playbookId,
+      workspace_id: workspaceId,
+      triggered_by: user.id,
+      segment_id: options?.segmentId ?? null,
+      status: "matching",
+      icp_snapshot: playbook.icp_profile,
+      dry_run: options?.dryRun ?? false,
+      started_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+
+  if (runError) throw runError;
+
+  let contacts = await listContacts();
+  if (options?.segmentId) {
+    const { getSegmentContactIds } = await import("@/lib/data/segments");
+    const ids = new Set(await getSegmentContactIds(options.segmentId));
+    contacts = contacts.filter((c) => ids.has(c.id));
+  }
+
+  const ownerIds = [...new Set(contacts.map((c) => c.owner_id).filter(Boolean))] as string[];
+  const { data: owners } = ownerIds.length
+    ? await supabase.from("profiles").select("id, name, email").in("id", ownerIds)
+    : { data: [] };
+
+  const ownerNames = new Map(
+    (owners ?? []).map((o) => [o.id as string, (o.name as string) || (o.email as string) || null]),
+  );
+
+  const activeContactIds = playbook.matching_config.dedupe_across_playbooks !== false
+    ? await getActivePlaybookContactIds(supabase)
+    : new Set<string>();
+  const doNotContactIds = await getDoNotContactIds(supabase);
+  const lastContactedAt = await getLastContactedMap(supabase);
+
+  const { matched, skipped } = scoreAllContactsForPlaybook(
+    contacts,
+    playbook.icp_profile,
+    playbook.matching_config,
+    playbook.outreach_mode,
+    { ownerNames, activeContactIds, doNotContactIds, lastContactedAt, currentUserId: user.id },
+  );
+
+  const rows = [
+    ...matched.map((m) => ({
+      run_id: run.id,
+      contact_id: m.contact.id,
+      match_score: m.score,
+      match_reason: m.reason,
+      matched_signals: m.signals,
+      warm_path: m.warmPath,
+      status: "matched" as const,
+    })),
+    ...skipped.slice(0, 100).map((m) => ({
+      run_id: run.id,
+      contact_id: m.contact.id,
+      match_score: m.score,
+      match_reason: m.reason,
+      matched_signals: m.signals,
+      warm_path: m.warmPath,
+      status: "skipped" as const,
+      skip_reason: m.skipReason ?? "filtered",
+    })),
+  ];
+
+  if (rows.length) {
+    await supabase.from("playbook_run_contacts").insert(rows);
+  }
+
+  await supabase
+    .from("playbook_runs")
+    .update({
+      status: "review",
+      stats: { matched: matched.length, skipped: skipped.length, selected: 0, sent: 0 },
+    })
+    .eq("id", run.id);
+
+  await logAuditEvent("playbook.run_started", "playbook_run", run.id, {
+    playbook_id: playbookId,
+    matched: matched.length,
+    skipped: skipped.length,
+    dry_run: options?.dryRun ?? false,
+  });
+
+  return { ...(run as PlaybookRun), matched_count: matched.length, skipped_count: skipped.length };
+}
+
+export async function getPlaybookRun(runId: string): Promise<PlaybookRun | null> {
+  if (isDataDemoMode()) return getDemoRun(runId);
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.from("playbook_runs").select("*").eq("id", runId).maybeSingle();
+  if (error) throw error;
+  return (data as PlaybookRun) ?? null;
+}
+
+export async function listRunProspects(runId: string): Promise<PlaybookProspect[]> {
+  if (isDataDemoMode()) return getDemoRunProspects(runId);
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("playbook_run_contacts")
+    .select("*, contact:contacts(id, full_name, title, email, company_name, strength_score)")
+    .eq("run_id", runId)
+    .order("match_score", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const contactRaw = row.contact as PlaybookProspect["contact"] | PlaybookProspect["contact"][] | null;
+    const contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;
+    return {
+      id: row.id,
+      run_id: row.run_id,
+      contact_id: row.contact_id,
+      match_score: row.match_score,
+      match_reason: row.match_reason,
+      matched_signals: row.matched_signals ?? [],
+      warm_path: row.warm_path ?? [],
+      status: row.status,
+      draft_subject: row.draft_subject,
+      draft_body: row.draft_body,
+      skip_reason: row.skip_reason,
+      last_action_at: row.last_action_at,
+      created_at: row.created_at,
+      contact: contact ?? undefined,
+    } as PlaybookProspect;
+  });
+}
+
+export async function finalizeRunProspects(runId: string, prospectIds: string[]) {
+  if (isDataDemoMode()) {
+    prospectIds.forEach((id) => updateDemoProspect(id, { status: "selected" }));
+    return;
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  await supabase
+    .from("playbook_run_contacts")
+    .update({ status: "skipped", skip_reason: "not_selected" })
+    .eq("run_id", runId)
+    .eq("status", "matched");
+
+  if (prospectIds.length) {
+    await supabase
+      .from("playbook_run_contacts")
+      .update({ status: "selected", last_action_at: new Date().toISOString() })
+      .eq("run_id", runId)
+      .in("id", prospectIds);
+  }
+
+  await supabase
+    .from("playbook_runs")
+    .update({ status: "finalized", stats: { selected: prospectIds.length } })
+    .eq("id", runId);
+
+  await logAuditEvent("playbook.run_finalized", "playbook_run", runId, {
+    selected: prospectIds.length,
+  });
+}
+
+export async function getRunProspect(prospectId: string): Promise<PlaybookProspect | null> {
+  if (isDataDemoMode()) {
+    const { getDemoProspectById } = await import("@/lib/demo-store/playbooks");
+    return getDemoProspectById(prospectId);
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("playbook_run_contacts")
+    .select("*, contact:contacts(id, full_name, title, email, company_name, strength_score)")
+    .eq("id", prospectId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const contactRaw = data.contact as PlaybookProspect["contact"] | PlaybookProspect["contact"][] | null;
+  const contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;
+
+  return {
+    id: data.id,
+    run_id: data.run_id,
+    contact_id: data.contact_id,
+    match_score: data.match_score,
+    match_reason: data.match_reason,
+    matched_signals: data.matched_signals ?? [],
+    warm_path: data.warm_path ?? [],
+    status: data.status,
+    draft_subject: data.draft_subject,
+    draft_body: data.draft_body,
+    skip_reason: data.skip_reason,
+    last_action_at: data.last_action_at,
+    created_at: data.created_at,
+    contact: contact ?? undefined,
+  };
+}
+
+export async function updateProspectDraft(
+  prospectId: string,
+  updates: { draft_subject?: string; draft_body?: string },
+) {
+  if (isDataDemoMode()) {
+    updateDemoProspect(prospectId, updates);
+    await logAuditEvent("playbook.draft_edited", "playbook_run_contact", prospectId, updates);
+    return;
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  await supabase
+    .from("playbook_run_contacts")
+    .update({ ...updates, last_action_at: new Date().toISOString() })
+    .eq("id", prospectId);
+
+  await logAuditEvent("playbook.draft_edited", "playbook_run_contact", prospectId, updates);
+}
+
+export async function postThreadMessage(runContactId: string, body: string) {
+  if (isDataDemoMode()) {
+    const { addDemoThreadMessage } = await import("@/lib/demo-store/playbooks");
+    addDemoThreadMessage(runContactId, { body, message_type: "text" });
+    return;
+  }
+
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+
+  const { data: prospect } = await supabase
+    .from("playbook_run_contacts")
+    .select("contact_id")
+    .eq("id", runContactId)
+    .maybeSingle();
+
+  if (!prospect) throw new Error("Prospect not found");
+
+  const thread = await ensureThread(supabase, workspaceId, prospect.contact_id, runContactId);
+  await supabase.from("thread_messages").insert({
+    thread_id: thread.id,
+    sender_user_id: user.id,
+    body,
+    message_type: "text",
+    metadata: {},
+  });
+  await supabase
+    .from("conversation_threads")
+    .update({ last_message_at: new Date().toISOString() })
+    .eq("id", thread.id);
+}
+
+export async function generateProspectDrafts(runId: string, playbook: Playbook) {
+  const run = await getPlaybookRun(runId);
+  const prospects = (await listRunProspects(runId)).filter((p) => p.status === "selected");
+  const nextStatus = "pending_approval" as const;
+
+  for (const prospect of prospects) {
+    if (!prospect.contact) continue;
+
+    let subject: string;
+    let body: string;
+
+    if (playbook.template_id) {
+      const { getEmailTemplate, applyTemplate } = await import("@/lib/data/email-templates");
+      const template = await getEmailTemplate(playbook.template_id);
+      if (template) {
+        const applied = applyTemplate(template, {
+          name: prospect.contact.full_name,
+          company: prospect.contact.company_name,
+          title: prospect.contact.title,
+        });
+        subject = applied.subject;
+        body = applied.body;
+      } else {
+        const outreach = await generateOutreach({
+          contactName: prospect.contact.full_name,
+          contactTitle: prospect.contact.title,
+          companyName: prospect.contact.company_name,
+          type: "cold_email",
+          tone: playbook.tone,
+          goal: playbook.goal ?? "Schedule a brief intro call",
+          context: prospect.match_reason ?? undefined,
+        });
+        subject = outreach.subject ?? `Quick intro — ${prospect.contact.full_name}`;
+        body = outreach.body;
+      }
+    } else {
+      const outreach = await generateOutreach({
+        contactName: prospect.contact.full_name,
+        contactTitle: prospect.contact.title,
+        companyName: prospect.contact.company_name,
+        type: "cold_email",
+        tone: playbook.tone,
+        goal: playbook.goal ?? "Schedule a brief intro call",
+        context: prospect.match_reason ?? undefined,
+      });
+      subject = outreach.subject ?? `Quick intro — ${prospect.contact.full_name}`;
+      body = outreach.body;
+    }
+
+    if (isDataDemoMode()) {
+      updateDemoProspect(prospect.id, {
+        status: nextStatus,
+        draft_subject: subject,
+        draft_body: body,
+      });
+      continue;
+    }
+
+    const { supabase } = await getUserWorkspaceContext();
+    if (!supabase) continue;
+
+    await supabase
+      .from("playbook_run_contacts")
+      .update({
+        status: nextStatus,
+        draft_subject: subject,
+        draft_body: body,
+        last_action_at: new Date().toISOString(),
+      })
+      .eq("id", prospect.id);
+  }
+
+  if (playbook.automation_level === "autonomous" && !run?.dry_run) {
+    const pending = (await listRunProspects(runId))
+      .filter((p) => p.status === "pending_approval")
+      .map((p) => p.id);
+    if (pending.length) {
+      await bulkApproveAndSend(runId, pending);
+    }
+  } else if (playbook.automation_level === "supervised" && !run?.dry_run) {
+    await logAuditEvent("playbook.supervised_queue", "playbook_run", runId, {
+      count: prospects.length,
+      note: "Drafts ready for supervised review",
+    });
+  }
+}
+
+export async function approveAndSendProspect(prospectId: string, runId: string) {
+  const prospects = await listRunProspects(runId);
+  const prospect = prospects.find((p) => p.id === prospectId);
+  if (!prospect?.contact?.email) throw new Error("Contact has no email");
+
+  const run = await getPlaybookRun(runId);
+  const playbook = run ? await getPlaybook(run.playbook_id) : null;
+
+  if (isDataDemoMode()) {
+    updateDemoProspect(prospectId, { status: "sent" });
+    await logAuditEvent("playbook.email_sent", "playbook_run_contact", prospectId, {
+      demo: true,
+    });
+    if (playbook) {
+      const { scheduleFollowUpForProspect } = await import("@/lib/data/playbook-sequences");
+      await scheduleFollowUpForProspect(prospectId, playbook, 0);
+    }
+    return { sent: true, demo: true };
+  }
+
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+
+  if (run?.dry_run) {
+    await logAuditEvent("playbook.dry_run_send", "playbook_run_contact", prospectId, {
+      contact: prospect.contact.full_name,
+    });
+    await supabase
+      .from("playbook_run_contacts")
+      .update({ status: "sent", last_action_at: new Date().toISOString() })
+      .eq("id", prospectId);
+    await incrementRunSentCount(supabase, runId);
+    return { sent: true, dry_run: true };
+  }
+
+  if (playbook) {
+    const { canSendNow } = await import("@/lib/playbooks/send-utils");
+    const gate = canSendNow(playbook.send_config);
+    if (!gate.ok) throw new Error(gate.reason ?? "Sending not allowed now");
+
+    if (playbook.send_config.daily_cap) {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from("outbound_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .gte("sent_at", startOfDay.toISOString());
+      if ((count ?? 0) >= playbook.send_config.daily_cap) {
+        throw new Error("Daily send cap reached");
+      }
+    }
+  }
+
+  const { sendEmail } = await import("@/lib/email/send");
+  const subject = prospect.draft_subject ?? "Hello from Potentially";
+  const body = prospect.draft_body ?? "";
+  const html = body.replace(/\n/g, "<br>");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const unsubscribeUrl = `${appUrl}/unsubscribe?contact=${prospect.contact_id}`;
+
+  const emailResult = await sendEmail({
+    to: prospect.contact.email,
+    subject,
+    html: `${html}<br><br><small><a href="${unsubscribeUrl}">Unsubscribe</a></small>`,
+    headers: {
+      "X-Potentially-Run-Contact": prospectId,
+    },
+  });
+
+  const { data: outbound } = await supabase
+    .from("outbound_messages")
+    .insert({
+      run_id: runId,
+      run_contact_id: prospectId,
+      contact_id: prospect.contact_id,
+      workspace_id: workspaceId,
+      channel: "email",
+      subject,
+      body,
+      status: "sent",
+      provider_message_id: emailResult?.id ?? null,
+      sent_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  void outbound;
+
+  await supabase
+    .from("playbook_run_contacts")
+    .update({ status: "sent", last_action_at: new Date().toISOString() })
+    .eq("id", prospectId);
+
+  await touchContactLastContacted(supabase, prospect.contact_id);
+  await incrementRunSentCount(supabase, runId);
+
+  await supabase.from("thread_messages").insert({
+    thread_id: (
+      await ensureThread(supabase, workspaceId, prospect.contact_id, prospectId)
+    ).id,
+    sender_user_id: user.id,
+    body: `Email sent: ${subject}`,
+    message_type: "system",
+    metadata: { channel: "email", provider_message_id: emailResult?.id },
+  });
+
+  await logAuditEvent("playbook.email_sent", "playbook_run_contact", prospectId, {
+    to: prospect.contact.email,
+    provider_message_id: emailResult?.id,
+  });
+
+  if (playbook) {
+    const { scheduleFollowUpForProspect } = await import("@/lib/data/playbook-sequences");
+    const currentStep =
+      (prospect as PlaybookProspect & { current_sequence_step?: number }).current_sequence_step ?? 0;
+    await scheduleFollowUpForProspect(prospectId, playbook, currentStep);
+  }
+
+  return { sent: true, provider_message_id: emailResult?.id };
+}
+
+export async function bulkApproveAndSend(runId: string, prospectIds: string[]) {
+  const results: Array<{ prospectId: string; ok: boolean; error?: string }> = [];
+
+  for (const prospectId of prospectIds) {
+    try {
+      await approveAndSendProspect(prospectId, runId);
+      results.push({ prospectId, ok: true });
+    } catch (error) {
+      results.push({
+        prospectId,
+        ok: false,
+        error: error instanceof Error ? error.message : "Failed",
+      });
+    }
+  }
+
+  await logAuditEvent("playbook.bulk_send", "playbook_run", runId, {
+    total: prospectIds.length,
+    sent: results.filter((r) => r.ok).length,
+  });
+
+  return results;
+}
+
+async function ensureThread(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  workspaceId: string,
+  contactId: string,
+  runContactId: string,
+) {
+  const { data: existing } = await supabase
+    .from("conversation_threads")
+    .select("*")
+    .eq("contact_id", contactId)
+    .eq("run_contact_id", runContactId)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from("conversation_threads")
+    .insert({
+      workspace_id: workspaceId,
+      contact_id: contactId,
+      run_contact_id: runContactId,
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function listPlaybookRuns(playbookId: string) {
+  if (isDataDemoMode()) {
+    const { getDemoRunsForPlaybook } = await import("@/lib/demo-store/playbooks");
+    return getDemoRunsForPlaybook(playbookId);
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("playbook_runs")
+    .select("*")
+    .eq("playbook_id", playbookId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as PlaybookRun[];
+}
+
+export async function getProspectThreadMessages(runContactId: string) {
+  if (isDataDemoMode()) {
+    const { getDemoThreadMessages } = await import("@/lib/demo-store/playbooks");
+    return getDemoThreadMessages(runContactId);
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return [];
+
+  const { data: thread } = await supabase
+    .from("conversation_threads")
+    .select("id")
+    .eq("run_contact_id", runContactId)
+    .maybeSingle();
+
+  if (!thread) return [];
+
+  const { data, error } = await supabase
+    .from("thread_messages")
+    .select("*")
+    .eq("thread_id", thread.id)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}

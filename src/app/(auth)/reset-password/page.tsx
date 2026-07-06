@@ -69,7 +69,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthShell>
       <CardHeader className="space-y-1 p-0 text-center">
-        <CardTitle className="font-display text-4xl text-foreground">Set new password</CardTitle>
+        <CardTitle className="font-display text-2xl text-foreground">Set new password</CardTitle>
         <CardDescription>
           {ready ? "Choose a strong password for your account" : "Open the link from your email to continue"}
         </CardDescription>

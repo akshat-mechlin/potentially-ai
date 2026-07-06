@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Handshake, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Handshake, Clock, CheckCircle, XCircle, Loader2, Plus } from "lucide-react";
+import {
+  MOBILE_BOTTOM_SHEET,
+  MobileEmpty,
+  MobileFab,
+  MobileMenuList,
+} from "@/components/mobile/primitives";
+import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,7 +18,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -20,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import type { Contact, Introduction } from "@/types";
 import { toast } from "sonner";
@@ -36,6 +43,7 @@ export default function IntrosPage() {
   const [open, setOpen] = useState(false);
   const [contactId, setContactId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
 
   const { data: introsData, isLoading } = useQuery<{ introductions: Introduction[] }>({
@@ -77,40 +85,77 @@ export default function IntrosPage() {
 
   const introductions = introsData?.introductions ?? [];
 
+  const requestDialog = (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
+        <DialogHeader>
+          <DialogTitle>Request intro</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
+          <Select value={contactId} onValueChange={setContactId}>
+            <SelectTrigger className={isMobileApp ? "rounded-xl" : undefined}>
+              <SelectValue placeholder="Select contact" />
+            </SelectTrigger>
+            <SelectContent>
+              {(contactsData?.contacts ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleRequest} disabled={submitting} className="w-full rounded-xl">
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Submit
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (isMobileApp) {
+    return (
+      <>
+        {isLoading ? (
+          <MobileEmpty>Loading...</MobileEmpty>
+        ) : (
+          <MobileMenuList>
+            {introductions.map((intro) => {
+              const contact = intro.target_contact;
+              if (!contact) return null;
+              const config = statusConfig[intro.status];
+              return (
+                <div key={intro.id} className="mobile-list-row">
+                  <Avatar className="h-10 w-10 shrink-0">
+                    <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{contact.full_name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{contact.company_name}</p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    {config.label}
+                  </Badge>
+                </div>
+              );
+            })}
+            {!introductions.length && <MobileEmpty>No introductions yet</MobileEmpty>}
+          </MobileMenuList>
+        )}
+
+        <MobileFab onClick={() => setOpen(true)} label="Request introduction">
+          <Plus className="h-6 w-6" />
+        </MobileFab>
+        {requestDialog}
+      </>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sub text-muted-foreground">Track and manage warm introduction requests</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>Request Introduction</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Request introduction</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <Select value={contactId} onValueChange={setContactId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a contact" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(contactsData?.contacts ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={handleRequest} disabled={submitting} className="w-full">
-                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Submit request
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <p className="text-sub text-muted-foreground">Track and manage warm introduction requests</p>
+        <Button onClick={() => setOpen(true)}>Request Introduction</Button>
       </div>
 
       {isLoading ? (
@@ -134,9 +179,7 @@ export default function IntrosPage() {
                       {contact.title} at {contact.company_name}
                     </p>
                     {intro.connector_name && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Via {intro.connector_name}
-                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">Via {intro.connector_name}</p>
                     )}
                   </div>
                   <div className="text-right">
@@ -154,6 +197,8 @@ export default function IntrosPage() {
           })}
         </div>
       )}
+
+      {requestDialog}
     </div>
   );
 }

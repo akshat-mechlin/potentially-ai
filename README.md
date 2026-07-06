@@ -5,13 +5,8 @@ AI-powered relationship intelligence and warm-introduction platform. Search your
 ## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Copy environment variables
 cp .env.example .env.local
-
-# Start development server (demo mode works without Supabase)
 npm run dev
 ```
 
@@ -23,73 +18,68 @@ Open [http://localhost:3000](http://localhost:3000). In demo mode, sign in with 
 |-------|-----------|
 | Frontend | Next.js 16, TypeScript, TailwindCSS, shadcn/ui |
 | State | React Query, Zustand |
-| Forms | React Hook Form, Zod |
-| Animation | Framer Motion |
-| Backend | Supabase (Auth, PostgreSQL, RLS, Edge Functions) |
+| Backend | Supabase (Auth, PostgreSQL, RLS) |
 | AI | OpenAI (Embeddings, RAG, Structured Outputs) |
 | Vector Search | pgvector |
-| Deployment | Vercel, Docker, GitHub Actions |
-
-## Project Structure
-
-```
-potentially-ai/
-├── src/
-│   ├── app/                    # Next.js App Router pages & API routes
-│   │   ├── (app)/              # Authenticated routes
-│   │   ├── (auth)/             # Login, signup, forgot password
-│   │   └── api/                # REST API endpoints
-│   ├── components/
-│   │   ├── ui/                 # shadcn/ui components
-│   │   ├── layout/             # Sidebar, header, command menu
-│   │   ├── search/             # AI search interface
-│   │   ├── network/            # Graph visualization
-│   │   └── ...
-│   ├── lib/
-│   │   ├── supabase/           # Supabase clients
-│   │   ├── ai/                 # OpenAI integration
-│   │   └── demo-data.ts        # Demo mode seed data
-│   ├── stores/                 # Zustand stores
-│   └── types/                  # TypeScript types
-├── supabase/
-│   ├── migrations/             # SQL schema + RLS policies
-│   └── functions/              # Edge Functions (sync, AI search)
-├── scripts/seed.ts             # Database seed script
-├── e2e/                        # Playwright E2E tests
-└── .github/workflows/          # CI/CD pipeline
-```
+| Email | Resend |
+| Billing | Stripe Checkout (optional) |
 
 ## Features
 
-- **AI Search** — Natural language queries with vector search, ranking, and reasoning
-- **Network Graph** — Interactive visualization with zoom, search, and path finding
+- **AI Search** — Natural language queries across all groups you belong to
+- **Network Graph** — Interactive visualization across your combined network
 - **Warm Introductions** — Request, track, and manage intro workflows
 - **Outreach Engine** — AI-generated emails, LinkedIn messages, and intro requests
-- **Contact Management** — Search, filter, profile views with AI summaries
-- **Data Ingestion** — Google, Outlook, Gmail, Calendar, CSV import pipelines
-- **Team Workspaces** — Role-based access (owner, admin, member, viewer)
-- **Analytics** — Searches, engagement, growth trends
-- **Admin Panel** — Users, workspaces, feature flags
+- **Groups** — Role-based teams (owner, admin, member, viewer) with invite links
+- **Connectors** — Google Contacts, Outlook, CSV import (more in beta)
+- **Analytics** — Aggregated usage across all your groups
+- **Admin Panel** — Users, groups, feature flags
+- **Playbooks** — ICP matching, assist-mode outreach, sequences, reply detection
+- **Segments** — Saved contact lists for playbook targeting
 
-## Pages
+## Playbooks (end-to-end test flow)
+
+1. **Segments:** Contacts → Select for segment → save list, or create at `/segments`
+2. **Playbook:** `/playbooks` → New playbook → ICP & settings tab (titles, dedupe, cooldown, Calendly URL)
+3. **Sequence:** Sequence tab → add follow-up steps → Save
+4. **Run:** Run & review → Match contacts → select → Finalize → Generate drafts
+5. **Send:** Edit drafts inline → Approve & send (or Approve all). Start with **Dry run** checked.
+6. **Prospect view:** Click a prospect name → Conversation / Calendly / simulate reply
+7. **Audit:** Audit tab on playbook detail
+8. **Admin:** Enable `platform_chat` for live prospect chat UI
+
+Optional env for production email/replies:
+
+```env
+RESEND_WEBHOOK_SECRET=whsec_...   # POST /api/email/webhook
+CRON_SECRET=...                   # POST /api/cron/playbook-sequences
+NEXT_PUBLIC_CALENDLY_URL=https://calendly.com/you/15min
+```
+
+Simulate inbound reply in demo: prospect view → **Simulate inbound reply**, or `POST /api/playbooks/replies`.
+
+**Automation levels:** `assist` (manual approve), `supervised` (draft queue + audit), `autonomous` (auto-send after generate drafts).
+
+**External webhooks:**
+- Resend → `POST /api/email/webhook`
+- Calendly → `POST /api/calendly/webhook`
+- Sequences cron → `POST /api/cron/playbook-sequences` with `Authorization: Bearer CRON_SECRET`
+
 
 | Route | Description |
 |-------|-------------|
-| `/` | Landing page |
-| `/features` | Feature overview |
-| `/pricing` | Pricing plans |
-| `/login` | Authentication |
-| `/signup` | Registration |
-| `/dashboard` | Overview widgets |
-| `/search` | AI-powered search |
-| `/network` | Relationship graph |
-| `/contacts` | Contact directory |
-| `/contacts/[id]` | Contact profile + outreach |
-| `/intros` | Introduction tracking |
-| `/workspace` | Connections & team |
-| `/analytics` | Usage analytics |
-| `/settings` | User preferences |
-| `/admin` | Admin panel |
+| `/dashboard` | Overview widgets and live activity feed |
+| `/search` | AI-powered search across all groups |
+| `/network` | Relationship graph (all groups) |
+| `/contacts` | Contact directory (all groups) |
+| `/segments` | Saved contact lists |
+| `/playbooks` | Outreach playbooks & runs |
+| `/groups` | Manage groups, members, connectors |
+| `/invite?token=…` | Join a group (sign in or sign up) |
+| `/pricing` | Plans with Stripe checkout when configured |
+| `/admin` | Admin panel (admin users only) |
+
+`/workspace` redirects to `/groups` for backwards compatibility.
 
 ## Environment Variables
 
@@ -99,78 +89,56 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 OPENAI_API_KEY=sk-your-openai-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+RESEND_API_KEY=re_...
+EMAIL_FROM=Potentially <onboarding@yourdomain.com>
+
+# Optional Stripe billing
+STRIPE_SECRET_KEY=sk_...
+STRIPE_PRO_PRICE_ID=price_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-## Supabase Setup
+### Stripe setup
 
-1. Create a project at [supabase.com](https://supabase.com)
-2. Enable Google and Azure OAuth in Authentication → Providers
-3. Run migrations (see `supabase/migrations/README.md` for sequence):
+1. Create a Product + recurring Price in the [Stripe Dashboard](https://dashboard.stripe.com)
+2. Add the three Stripe variables above to `.env`
+3. **Local webhooks:** `stripe listen --forward-to localhost:3000/api/billing/webhook`
+4. **Production:** add webhook endpoint `https://your-domain.com/api/billing/webhook` for:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
 
-```bash
-npm run db:validate   # verify local migration order
-npx supabase link --project-ref your-project-ref
-npx supabase db push
-```
+Checkout stores `workspace_id` and `plan` in metadata; the webhook sets that group's `plan` to `pro` (or `free` on cancellation).
 
-4. Seed the database:
+## API Architecture
 
-```bash
-npm run seed
-```
+Search, sync, and outreach run in **Next.js API routes** (`src/app/api/`). Supabase Edge Functions in `supabase/functions/` are optional legacy references — the app does not require them for core features.
 
-## API Endpoints
+Key endpoints:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/search` | AI-powered network search |
-| POST | `/api/outreach` | Generate outreach messages |
-| GET | `/api/contacts` | List contacts |
-| POST | `/api/contacts` | Import contacts (CSV) |
-| GET | `/api/graph` | Network graph data |
-| GET | `/api/dashboard` | Dashboard statistics |
-| GET | `/api/analytics` | Analytics data |
-| POST | `/api/sync` | Start data sync job |
-| POST | `/api/workspaces` | Create workspace |
-
-## Deployment
-
-### Vercel
-
-1. Push to GitHub
-2. Import project in [Vercel](https://vercel.com)
-3. Add environment variables
-4. Deploy
-
-### Docker
-
-```bash
-docker-compose up --build
-```
-
-### Edge Functions
-
-```bash
-npx supabase functions deploy sync-contacts
-npx supabase functions deploy ai-search
-```
+| POST | `/api/search` | AI search (all groups, plan limits enforced) |
+| POST | `/api/groups/join` | Join a group from invite token |
+| POST | `/api/billing/checkout` | Start Stripe checkout or manual upgrade flow |
+| POST | `/api/billing/webhook` | Stripe webhook (subscription → group plan) |
+| GET | `/api/dashboard` | Stats + recent activity feed |
+| POST | `/api/intros` | Request an introduction |
 
 ## Testing
 
 ```bash
 npm run test          # Unit tests (Vitest)
-npm run test:e2e      # E2E tests (Playwright)
-npm run lint          # ESLint
+npm run test:e2e      # E2E tests (Playwright, demo mode)
 npm run typecheck     # TypeScript
+npm run lint          # ESLint
 ```
+
+CI runs lint, typecheck, unit tests, build, and E2E on push/PR to `main`.
 
 ## Demo Mode
 
-Without Supabase credentials, the app runs in demo mode with:
-- Pre-populated contacts, companies, and relationships
-- Working AI search (mock ranking without OpenAI key)
-- Full UI navigation and interactions
-- Login with any email/password
+Set `NEXT_PUBLIC_DEMO_MODE=true` (or omit Supabase credentials) to run with in-memory data.
 
 ## License
 

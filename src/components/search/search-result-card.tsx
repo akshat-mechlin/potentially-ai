@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Building2, Mail, UserPlus } from "lucide-react";
+import { ArrowRight, Building2, Mail, UserPlus, Users, Loader2 } from "lucide-react";
+import { useState } from "react";
 import type { SearchResultContact } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface SearchResultCardProps {
   contact: SearchResultContact;
@@ -15,6 +18,28 @@ interface SearchResultCardProps {
 }
 
 export function SearchResultCard({ contact, index }: SearchResultCardProps) {
+  const router = useRouter();
+  const [requestingIntro, setRequestingIntro] = useState(false);
+
+  const handleRequestIntro = async () => {
+    setRequestingIntro(true);
+    try {
+      const res = await fetch("/api/intros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_contact_id: contact.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to request introduction");
+      toast.success("Introduction requested");
+      router.push("/intros");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to request introduction");
+    } finally {
+      setRequestingIntro(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -46,6 +71,16 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
                     </span>
                   )}
                 </p>
+                {contact.network_owner_name && (
+                  <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <Users className="h-3 w-3" />
+                    In {contact.network_owner_name}&apos;s network
+                    {contact.group_name ? ` · ${contact.group_name}` : ""}
+                  </p>
+                )}
+                {!contact.network_owner_name && contact.group_name && (
+                  <p className="mt-1 text-xs text-muted-foreground">{contact.group_name}</p>
+                )}
               </div>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                 {contact.score}
@@ -74,13 +109,24 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
                 </Link>
               </Button>
               {contact.email && (
-                <Button variant="ghost" size="sm">
-                  <Mail className="mr-1 h-3 w-3" />
-                  Email
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/contacts/${contact.id}?tab=outreach`}>
+                    <Mail className="mr-1 h-3 w-3" />
+                    Email
+                  </Link>
                 </Button>
               )}
-              <Button variant="ghost" size="sm">
-                <UserPlus className="mr-1 h-3 w-3" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRequestIntro}
+                disabled={requestingIntro}
+              >
+                {requestingIntro ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <UserPlus className="mr-1 h-3 w-3" />
+                )}
                 Request intro
               </Button>
             </div>

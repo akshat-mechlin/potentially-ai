@@ -212,5 +212,9 @@ export function getDemoDashboardStats() {
     recent_searches: searchHistory.length,
     introductions_success: introductions.filter((i) => i.status === "completed").length,
     ai_usage_tokens: 45200,
+    activity: [
+      { id: "1", event: "Synced 47 contacts from Google", time: "2h ago", created_at: new Date().toISOString() },
+      { id: "2", event: "AI search: Find CTOs in fintech", time: "5h ago", created_at: new Date().toISOString() },
+    ],
   };
 }

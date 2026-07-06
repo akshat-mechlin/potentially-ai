@@ -46,5 +46,53 @@
     "name": "fix_rls_function_grants",
     "file": "20260626210000_fix_rls_function_grants.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260627120000",
+    "name": "data_connectors",
+    "file": "20260627120000_data_connectors.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260627140000",
+    "name": "multi_account_connectors",
+    "file": "20260627140000_multi_account_connectors.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260627160000",
+    "name": "ensure_user_onboarded",
+    "file": "20260627160000_ensure_user_onboarded.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260627180000",
+    "name": "workspace_invite_token",
+    "file": "20260627180000_workspace_invite_token.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260627200000",
+    "name": "match_contacts_in_workspaces",
+    "file": "20260627200000_match_contacts_in_workspaces.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260627210000",
+    "name": "billing_and_feature_flags",
+    "file": "20260627210000_billing_and_feature_flags.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260628100000",
+    "name": "playbooks_and_segments",
+    "file": "20260628100000_playbooks_and_segments.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260628120000",
+    "name": "playbook_sequences_polish",
+    "file": "20260628120000_playbook_sequences_polish.sql",
+    "remote": "applied"
   }
 ]

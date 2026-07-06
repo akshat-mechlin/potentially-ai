@@ -5,18 +5,21 @@ import {
   getDemoIntroductions,
 } from "@/lib/demo-store";
 import type { Contact, Introduction } from "@/types";
-import { getUserWorkspaceContext } from "./workspace";
+import { getUserWorkspaceContext, listUserWorkspaces } from "./workspace";
 
 export async function listIntroductions(): Promise<Introduction[]> {
   if (isDataDemoMode()) return getDemoIntroductions();
 
-  const { supabase, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !workspaceId) return [];
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) throw new Error("Unauthorized");
+
+  const workspaceIds = (await listUserWorkspaces(supabase)).map((workspace) => workspace.id);
+  if (!workspaceIds.length) return [];
 
   const { data: rows, error } = await supabase
     .from("introductions")
     .select("*")
-    .eq("workspace_id", workspaceId)
+    .in("workspace_id", workspaceIds)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -57,17 +60,18 @@ export async function createIntroduction(
     return intro;
   }
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) throw new Error("Unauthorized");
 
   const { data: contact } = await supabase
     .from("contacts")
-    .select("id, full_name")
+    .select("id, full_name, workspace_id")
     .eq("id", targetContactId)
-    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (!contact) throw new Error("Contact not found");
+
+  const workspaceId = contact.workspace_id as string;
 
   const { data, error } = await supabase
     .from("introductions")
