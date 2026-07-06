@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Serif_Display, Fira_Sans, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { SplashStatic } from "@/components/pwa/splash-static";
+import { SplashBootstrapScript } from "@/components/pwa/splash-bootstrap";
 import "./globals.css";
 
 const firaSans = Fira_Sans({
@@ -65,6 +66,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className={`${firaSans.className} antialiased`} suppressHydrationWarning>
+        <SplashBootstrapScript />
         <SplashStatic />
         <Providers>{children}</Providers>
       </body>

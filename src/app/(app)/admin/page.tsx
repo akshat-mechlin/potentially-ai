@@ -4,27 +4,68 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DesktopOnly, MobileSegmented } from "@/components/mobile/primitives";
 import { useMobileApp } from "@/hooks/use-mobile-app";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  formatFeatureFlagLabel,
+  getFeatureFlagDescription,
+} from "@/lib/admin/feature-flags-catalog";
 import { toast } from "sonner";
 
-const FLAG_LABELS: Record<string, string> = {
-  ai_search: "AI-powered network search",
-  graph_view: "Interactive network graph",
-  outreach_engine: "AI outreach message generation",
-  team_collaboration: "Group invites and team features",
-  beta_connectors: "Beta connector integrations",
-  billing_enforcement: "Enforce plan limits on search and imports",
+type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  workspaces: number;
+  admin: boolean;
+};
+
+type AdminWorkspace = {
+  id: string;
+  name: string;
+  members: number;
+  plan: string;
+  contacts: number;
 };
 
 type AdminData = {
-  users: Array<{ name: string; email: string; workspaces: number; admin: boolean }>;
-  workspaces: Array<{ name: string; members: number; plan: string; contacts: number }>;
+  users: AdminUser[];
+  workspaces: AdminWorkspace[];
   featureFlags: Array<{ key: string; enabled: boolean; description?: string | null }>;
 };
 
 type AdminTab = "users" | "groups" | "flags";
+
+function FeatureFlagRow({
+  flag,
+  onToggle,
+  disabled,
+}: {
+  flag: { key: string; enabled: boolean; description?: string | null };
+  onToggle: (enabled: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{formatFeatureFlagLabel(flag.key)}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {getFeatureFlagDescription(flag.key, flag.description)}
+        </p>
+      </div>
+      <Switch checked={flag.enabled} disabled={disabled} onCheckedChange={onToggle} />
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
@@ -43,21 +84,60 @@ export default function AdminPage() {
     },
   });
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin"] });
+
   const flagMutation = useMutation({
     mutationFn: async ({ key, enabled }: { key: string; enabled: boolean }) => {
       const res = await fetch("/api/admin", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, enabled }),
+        body: JSON.stringify({ type: "feature_flag", key, enabled }),
       });
-      if (!res.ok) throw new Error("Failed to update flag");
-      return res.json();
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to update flag");
+      return body;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin"] });
+      invalidate();
       toast.success("Feature flag updated");
     },
-    onError: () => toast.error("Failed to update feature flag"),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update feature flag"),
+  });
+
+  const userMutation = useMutation({
+    mutationFn: async ({ userId, is_admin }: { userId: string; is_admin: boolean }) => {
+      const res = await fetch("/api/admin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "user", userId, is_admin }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to update user");
+      return body;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("User role updated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update user"),
+  });
+
+  const workspaceMutation = useMutation({
+    mutationFn: async ({ workspaceId, plan }: { workspaceId: string; plan: string }) => {
+      const res = await fetch("/api/admin", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "workspace", workspaceId, plan }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to update group plan");
+      return body;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast.success("Group plan updated");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update group plan"),
   });
 
   if (isLoading) {
@@ -75,36 +155,45 @@ export default function AdminPage() {
     );
   }
 
-  const usersPanel = isMobileApp ? (
-    <div className="mobile-menu-list">
-      {data?.users.map((user) => (
-        <div key={user.email} className="mobile-list-row">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            {user.admin && <Badge className="text-[10px]">Admin</Badge>}
-            <span className="text-[10px] text-muted-foreground">{user.workspaces} groups</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  ) : (
-    <Card>
-      <CardHeader>
+  const usersPanel = (
+    <Card className={isMobileApp ? "mobile-card-flat border-0 shadow-none" : undefined}>
+      <CardHeader className={isMobileApp ? "px-4 pt-4 pb-2" : undefined}>
         <CardTitle className="text-base">Users</CardTitle>
+        <CardDescription>Promote members to platform admin or revoke access</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className={isMobileApp ? "space-y-3 px-4 pb-4" : "space-y-3"}>
         {data?.users.map((user) => (
-          <div key={user.email} className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <p className="text-sm font-medium">{user.name}</p>
+          <div
+            key={user.id}
+            className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium">{user.name}</p>
+                {user.admin && <Badge>Admin</Badge>}
+              </div>
               <p className="text-xs text-muted-foreground">{user.email}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{user.workspaces} groups</p>
             </div>
-            <div className="flex items-center gap-2">
-              {user.admin && <Badge>Admin</Badge>}
-              <span className="text-xs text-muted-foreground">{user.workspaces} groups</span>
+            <div className="flex items-center gap-2 sm:min-w-[10rem]">
+              <Label htmlFor={`role-${user.id}`} className="sr-only">
+                Role for {user.name}
+              </Label>
+              <Select
+                value={user.admin ? "admin" : "member"}
+                onValueChange={(value) =>
+                  userMutation.mutate({ userId: user.id, is_admin: value === "admin" })
+                }
+                disabled={userMutation.isPending}
+              >
+                <SelectTrigger id={`role-${user.id}`} className="h-9 w-full sm:w-[9rem]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         ))}
@@ -112,79 +201,58 @@ export default function AdminPage() {
     </Card>
   );
 
-  const groupsPanel = isMobileApp ? (
-    <div className="mobile-menu-list">
-      {data?.workspaces.map((ws) => (
-        <div key={ws.name} className="mobile-list-row">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{ws.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {ws.members} members · {ws.contacts} contacts
-            </p>
-          </div>
-          <Badge variant="outline" className="shrink-0 text-[10px]">
-            {ws.plan}
-          </Badge>
-        </div>
-      ))}
-    </div>
-  ) : (
-    <Card>
-      <CardHeader>
+  const groupsPanel = (
+    <Card className={isMobileApp ? "mobile-card-flat border-0 shadow-none" : undefined}>
+      <CardHeader className={isMobileApp ? "px-4 pt-4 pb-2" : undefined}>
         <CardTitle className="text-base">Groups</CardTitle>
+        <CardDescription>Change billing plan for a group</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className={isMobileApp ? "space-y-3 px-4 pb-4" : "space-y-3"}>
         {data?.workspaces.map((ws) => (
-          <div key={ws.name} className="flex items-center justify-between rounded-lg border p-3">
-            <div>
+          <div
+            key={ws.id}
+            className="flex flex-col gap-3 rounded-lg border border-border/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
               <p className="text-sm font-medium">{ws.name}</p>
               <p className="text-xs text-muted-foreground">
                 {ws.members} members · {ws.contacts} contacts
               </p>
             </div>
-            <Badge variant="outline">{ws.plan}</Badge>
+            <Select
+              value={ws.plan}
+              onValueChange={(plan) => workspaceMutation.mutate({ workspaceId: ws.id, plan })}
+              disabled={workspaceMutation.isPending}
+            >
+              <SelectTrigger className="h-9 w-full capitalize sm:w-[9rem]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free</SelectItem>
+                <SelectItem value="pro">Pro</SelectItem>
+                <SelectItem value="enterprise">Enterprise</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         ))}
       </CardContent>
     </Card>
   );
 
-  const flagsPanel = isMobileApp ? (
-    <div className="mobile-menu-list">
-      {data?.featureFlags.map((flag) => (
-        <div key={flag.key} className="mobile-list-row items-start gap-3 py-3">
-          <div className="min-w-0 flex-1">
-            <code className="text-xs">{flag.key}</code>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {flag.description ?? FLAG_LABELS[flag.key] ?? "No description"}
-            </p>
-          </div>
-          <Switch
-            checked={flag.enabled}
-            onCheckedChange={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
-          />
-        </div>
-      ))}
-    </div>
-  ) : (
-    <Card>
-      <CardHeader>
+  const flagsPanel = (
+    <Card className={isMobileApp ? "mobile-card-flat border-0 shadow-none" : undefined}>
+      <CardHeader className={isMobileApp ? "px-4 pt-4 pb-2" : undefined}>
         <CardTitle className="text-base">Feature Flags</CardTitle>
+        <CardDescription>Toggle platform capabilities for all users</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={isMobileApp ? "space-y-3 px-4 pb-4" : "space-y-3"}>
         {data?.featureFlags.map((flag) => (
-          <div key={flag.key} className="flex items-center justify-between gap-4">
-            <div>
-              <code className="text-sm">{flag.key}</code>
-              <p className="text-xs text-muted-foreground">
-                {flag.description ?? FLAG_LABELS[flag.key] ?? "No description"}
-              </p>
-            </div>
-            <Switch
-              checked={flag.enabled}
-              onCheckedChange={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
-            />
-          </div>
+          <FeatureFlagRow
+            key={flag.key}
+            flag={flag}
+            disabled={flagMutation.isPending}
+            onToggle={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
+          />
         ))}
       </CardContent>
     </Card>

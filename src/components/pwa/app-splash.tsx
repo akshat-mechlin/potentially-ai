@@ -4,7 +4,8 @@ import { useLayoutEffect } from "react";
 import { useIsClient } from "@/hooks/use-is-client";
 
 const SPLASH_SESSION_KEY = "potentially-splash-seen";
-const MIN_VISIBLE_MS = 900;
+const MIN_VISIBLE_MS = 750;
+const MAX_VISIBLE_MS = 2200;
 
 function dismissStaticSplash() {
   document.documentElement.classList.add("splash-dismissed");
@@ -31,12 +32,15 @@ function shouldShowSplash(): boolean {
     ("standalone" in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
   if (!isMobile && !isStandalone) return false;
-  if (isStandalone) return true;
 
-  return !sessionStorage.getItem(SPLASH_SESSION_KEY);
+  try {
+    return !sessionStorage.getItem(SPLASH_SESSION_KEY);
+  } catch {
+    return true;
+  }
 }
 
-/** Dismisses the static splash after fonts + minimum display time. */
+/** Dismisses the static splash after a short branded moment — never blocks on fonts/load (iOS PWA safe). */
 export function AppSplash() {
   const mounted = useIsClient();
 
@@ -51,10 +55,17 @@ export function AppSplash() {
     }
 
     const startedAt = performance.now();
+    let finished = false;
 
     const finish = () => {
+      if (finished) return;
+      finished = true;
       dismissStaticSplash();
-      sessionStorage.setItem(SPLASH_SESSION_KEY, "1");
+      try {
+        sessionStorage.setItem(SPLASH_SESSION_KEY, "1");
+      } catch {
+        // sessionStorage may be unavailable in some embedded browsers
+      }
     };
 
     const scheduleFinish = () => {
@@ -62,25 +73,15 @@ export function AppSplash() {
       window.setTimeout(finish, Math.max(0, MIN_VISIBLE_MS - elapsed));
     };
 
-    if (document.readyState === "complete") {
-      if (document.fonts?.ready) {
-        void document.fonts.ready.then(scheduleFinish);
-      } else {
-        scheduleFinish();
-      }
-      return;
-    }
+    // Do not await document.fonts.ready — it can hang indefinitely in iOS standalone PWA.
+    scheduleFinish();
 
-    const onLoad = () => {
-      if (document.fonts?.ready) {
-        void document.fonts.ready.then(scheduleFinish);
-      } else {
-        scheduleFinish();
-      }
+    // Hard cap so auth/app content is never blocked behind the splash overlay.
+    const safetyTimer = window.setTimeout(finish, MAX_VISIBLE_MS);
+
+    return () => {
+      window.clearTimeout(safetyTimer);
     };
-
-    window.addEventListener("load", onLoad, { once: true });
-    return () => window.removeEventListener("load", onLoad);
   }, [mounted]);
 
   return null;

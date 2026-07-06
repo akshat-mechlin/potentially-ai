@@ -1,35 +1,43 @@
 import { isDataDemoMode } from "@/lib/app-config";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getDemoAdminUsers,
+  getDemoAdminWorkspaces,
+  getDemoFeatureFlags,
+  updateDemoFeatureFlag,
+  updateDemoUserAdmin,
+  updateDemoWorkspacePlan,
+} from "@/lib/demo-store/admin";
 import { getUserWorkspaceContext } from "./workspace";
+
+export async function assertAdminAccess() {
+  if (isDataDemoMode()) return { userId: "demo-admin-001" as string | null };
+
+  const { user, profile } = await getUserWorkspaceContext();
+  if (!user) throw new Error("Unauthorized");
+  if (!profile?.is_admin) throw new Error("Forbidden");
+  return { userId: user.id };
+}
 
 export async function getAdminData() {
   if (isDataDemoMode()) {
     return {
-      users: [
-        { name: "Alex Morgan", email: "demo@potentially.ai", workspaces: 1, admin: false },
-        { name: "Admin User", email: "admin@potentially.ai", workspaces: 1, admin: true },
-      ],
-      workspaces: [{ name: "Acme Ventures", members: 1, plan: "pro", contacts: 3 }],
-      featureFlags: [
-        { key: "ai_search", enabled: true, description: "AI-powered network search" },
-        { key: "graph_view", enabled: true, description: "Interactive network graph" },
-        { key: "outreach_engine", enabled: true, description: "AI outreach message generation" },
-        { key: "team_collaboration", enabled: true, description: "Group invites and team features" },
-        { key: "beta_connectors", enabled: false, description: "Beta connector integrations" },
-        { key: "billing_enforcement", enabled: true, description: "Enforce plan limits on search and imports" },
-      ],
+      users: getDemoAdminUsers(),
+      workspaces: getDemoAdminWorkspaces(),
+      featureFlags: getDemoFeatureFlags(),
     };
   }
 
-  const { supabase, user, profile } = await getUserWorkspaceContext();
-  if (!supabase || !user) throw new Error("Unauthorized");
-  if (!profile?.is_admin) throw new Error("Forbidden");
+  const { supabase } = await getUserWorkspaceContext();
+  await assertAdminAccess();
+  if (!supabase) throw new Error("Unauthorized");
 
   const [{ data: users }, { data: workspaces }, { data: flags }] = await Promise.all([
     supabase.from("profiles").select("id, name, email, is_admin").order("created_at", {
       ascending: false,
     }),
     supabase.from("workspaces").select("id, name, plan"),
-    supabase.from("feature_flags").select("key, enabled, description"),
+    supabase.from("feature_flags").select("key, enabled, description").order("key"),
   ]);
 
   const workspaceRows = await Promise.all(
@@ -45,6 +53,7 @@ export async function getAdminData() {
           .eq("workspace_id", ws.id),
       ]);
       return {
+        id: ws.id,
         name: ws.name,
         members: members ?? 0,
         plan: ws.plan,
@@ -60,6 +69,7 @@ export async function getAdminData() {
         .select("*", { count: "exact", head: true })
         .eq("user_id", u.id);
       return {
+        id: u.id,
         name: u.name || u.email,
         email: u.email,
         workspaces: count ?? 0,
@@ -76,17 +86,64 @@ export async function getAdminData() {
 }
 
 export async function updateFeatureFlag(key: string, enabled: boolean) {
-  if (isDataDemoMode()) return { key, enabled };
+  await assertAdminAccess();
 
-  const { supabase, profile } = await getUserWorkspaceContext();
-  if (!supabase) throw new Error("Unauthorized");
-  if (!profile?.is_admin) throw new Error("Forbidden");
+  if (isDataDemoMode()) {
+    return updateDemoFeatureFlag(key, enabled);
+  }
 
-  const { data, error } = await supabase
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("feature_flags")
     .update({ enabled })
     .eq("key", key)
     .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateUserAdmin(userId: string, isAdmin: boolean, actorUserId: string | null) {
+  await assertAdminAccess();
+
+  if (actorUserId && actorUserId === userId && !isAdmin) {
+    throw new Error("You cannot remove your own admin access");
+  }
+
+  if (isDataDemoMode()) {
+    return updateDemoUserAdmin(userId, isAdmin);
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("profiles")
+    .update({ is_admin: isAdmin })
+    .eq("id", userId)
+    .select("id, name, email, is_admin")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWorkspacePlan(workspaceId: string, plan: string) {
+  await assertAdminAccess();
+
+  if (!["free", "pro", "enterprise"].includes(plan)) {
+    throw new Error("Invalid plan");
+  }
+
+  if (isDataDemoMode()) {
+    return updateDemoWorkspacePlan(workspaceId, plan);
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("workspaces")
+    .update({ plan })
+    .eq("id", workspaceId)
+    .select("id, name, plan")
     .single();
 
   if (error) throw error;
