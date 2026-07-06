@@ -9,6 +9,18 @@ export function SplashBootstrapScript() {
         __html: `
 (function () {
   var root = document.documentElement;
+  var path = window.location.pathname;
+  var skipSplash =
+    path === "/" ||
+    path === "/login" ||
+    path === "/signup" ||
+    path === "/forgot-password" ||
+    path === "/reset-password" ||
+    path.indexOf("/invite") === 0 ||
+    path === "/pricing" ||
+    path === "/features" ||
+    path.indexOf("/unsubscribe") === 0;
+
   var mobile = window.matchMedia("(max-width: 1023px)").matches;
   var standalone =
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -19,6 +31,11 @@ export function SplashBootstrapScript() {
   if (mobile || standalone) root.dataset.mobileApp = "true";
 
   if (!mobile && !standalone) {
+    root.classList.add("splash-dismissed");
+    return;
+  }
+
+  if (skipSplash) {
     root.classList.add("splash-dismissed");
     return;
   }

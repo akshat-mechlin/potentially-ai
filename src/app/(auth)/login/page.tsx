@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -35,7 +35,6 @@ async function joinGroupFromInvite(invite: string) {
 }
 
 function LoginFormContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
   const [loading, setLoading] = useState(false);
@@ -53,13 +52,13 @@ function LoginFormContent() {
       try {
         const result = await joinGroupFromInvite(invite);
         toast.success(result.message || "Joined group");
-        router.push("/groups");
+        window.location.assign("/groups");
         return;
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not join group");
       }
     }
-    router.push("/dashboard");
+    window.location.assign("/dashboard");
   };
 
   const onSubmit = async (data: LoginForm) => {
@@ -98,10 +97,11 @@ function LoginFormContent() {
       ? `${window.location.origin}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
       : `${window.location.origin}/api/auth/callback?next=/dashboard`;
 
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },
     });
+    if (error) throw error;
   };
 
   const handleMagicLink = async (email: string) => {

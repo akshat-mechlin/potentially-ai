@@ -43,6 +43,8 @@ export async function updateSession(request: NextRequest) {
     "/analytics",
     "/settings",
     "/admin",
+    "/playbooks",
+    "/segments",
   ];
 
   const isProtected = protectedPaths.some((path) =>

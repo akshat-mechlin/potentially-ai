@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email } = schema.parse(body);
     const supabase = createAdminClient();
-    const redirectTo = `${getAppUrl()}/reset-password`;
+    const redirectTo = `${getAppUrl(request)}/reset-password`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",

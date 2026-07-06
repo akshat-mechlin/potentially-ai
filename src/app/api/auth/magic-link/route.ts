@@ -20,8 +20,8 @@ export async function POST(request: Request) {
     const { email, invite } = schema.parse(body);
     const supabase = createAdminClient();
     const redirectTo = invite
-      ? `${getAppUrl()}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
-      : `${getAppUrl()}/api/auth/callback?next=/dashboard`;
+      ? `${getAppUrl(request)}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
+      : `${getAppUrl(request)}/api/auth/callback?next=/dashboard`;
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "magiclink",

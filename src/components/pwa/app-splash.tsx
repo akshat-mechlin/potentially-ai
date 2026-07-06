@@ -2,13 +2,14 @@
 
 import { useLayoutEffect } from "react";
 import { useIsClient } from "@/hooks/use-is-client";
+import { dismissSplashElement, shouldSkipSplashForPath } from "@/lib/pwa/splash";
 
 const SPLASH_SESSION_KEY = "potentially-splash-seen";
 const MIN_VISIBLE_MS = 750;
 const MAX_VISIBLE_MS = 2200;
 
 function dismissStaticSplash() {
-  document.documentElement.classList.add("splash-dismissed");
+  dismissSplashElement();
 }
 
 function syncViewportClasses() {
@@ -25,6 +26,8 @@ function syncViewportClasses() {
 
 function shouldShowSplash(): boolean {
   if (typeof window === "undefined") return false;
+
+  if (shouldSkipSplashForPath(window.location.pathname)) return false;
 
   const isMobile = window.matchMedia("(max-width: 1023px)").matches;
   const isStandalone =
