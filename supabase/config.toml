@@ -19,8 +19,8 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000/api/auth/callback"]
+site_url = "http://localhost:1020"
+additional_redirect_urls = ["http://localhost:1020/api/auth/callback"]
 
 [auth.external.google]
 enabled = true

@@ -64,7 +64,7 @@ export function formatOAuthError(error: unknown, connectorKey?: ConnectorKey): s
   }
 
   if (normalized.includes("redirect") || normalized.includes("callback")) {
-    return `OAuth redirect URL mismatch. Add ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/auth/callback to Supabase → Authentication → URL Configuration → Redirect URLs.`;
+    return `OAuth redirect URL mismatch. Add ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:1020"}/api/auth/callback to Supabase → Authentication → URL Configuration → Redirect URLs.`;
   }
 
   return message;

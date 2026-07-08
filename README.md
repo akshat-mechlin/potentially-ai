@@ -10,7 +10,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). In demo mode, sign in with any credentials to explore the full application.
+Open [http://localhost:1020](http://localhost:1020). In demo mode, sign in with any credentials to explore the full application.
 
 ## Tech Stack
 
@@ -88,7 +88,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 OPENAI_API_KEY=sk-your-openai-key
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:1020
 RESEND_API_KEY=re_...
 EMAIL_FROM=Potentially <onboarding@yourdomain.com>
 
@@ -102,7 +102,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 1. Create a Product + recurring Price in the [Stripe Dashboard](https://dashboard.stripe.com)
 2. Add the three Stripe variables above to `.env`
-3. **Local webhooks:** `stripe listen --forward-to localhost:3000/api/billing/webhook`
+3. **Local webhooks:** `stripe listen --forward-to localhost:1020/api/billing/webhook`
 4. **Production:** add webhook endpoint `https://your-domain.com/api/billing/webhook` for:
    - `checkout.session.completed`
    - `customer.subscription.updated`

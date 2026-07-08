@@ -8,13 +8,13 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:1020",
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: "npm run dev",
-    url: "http://localhost:3000",
+    url: "http://localhost:1020",
     reuseExistingServer: !process.env.CI,
   },
 });

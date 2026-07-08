@@ -797,7 +797,7 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
   const subject = prospect.draft_subject ?? "Hello from Potentially";
   const body = prospect.draft_body ?? "";
   const html = body.replace(/\n/g, "<br>");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:1020";
   const unsubscribeUrl = `${appUrl}/unsubscribe?contact=${prospect.contact_id}`;
 
   const calendlyBase =

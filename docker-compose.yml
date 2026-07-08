@@ -4,13 +4,13 @@ services:
   app:
     build: .
     ports:
-      - "3000:3000"
+      - "1020:1020"
     environment:
       - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - NEXT_PUBLIC_APP_URL=http://localhost:1020
     depends_on:
       - db
 

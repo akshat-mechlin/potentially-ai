@@ -69,7 +69,7 @@ export async function createStripeCheckoutSession(options: {
   const priceId = process.env.STRIPE_PRO_PRICE_ID;
   if (!secretKey || !priceId) return null;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:1020";
   const params = new URLSearchParams({
     mode: "subscription",
     success_url: `${appUrl}/groups?upgraded=1`,

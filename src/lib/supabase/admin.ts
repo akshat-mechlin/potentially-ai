@@ -39,5 +39,5 @@ export function resolveAppUrl(request?: Request): string {
     }
   }
 
-  return configured || "http://localhost:3000";
+  return configured || "http://localhost:1020";
 }
