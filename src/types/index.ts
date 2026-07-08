@@ -24,6 +24,31 @@ export interface Profile {
   updated_at: string;
 }
 
+export type EmailSenderMode = "platform" | "custom";
+
+export type SenderDomainStatus = "not_started" | "pending" | "verified" | "failed";
+
+export interface WorkspaceEmailSettings {
+  mode: EmailSenderMode;
+  customSenderName: string | null;
+  customSenderEmail: string | null;
+  platformFromAddress: string;
+  canEdit: boolean;
+  senderDomain: string | null;
+  senderDomainStatus: SenderDomainStatus;
+  domainSetup: {
+    records: Array<{
+      type: string;
+      name: string;
+      value: string;
+      status: string;
+      record: string;
+    }>;
+    resendConfigured: boolean;
+    domainManagementAvailable: boolean;
+  };
+}
+
 export interface Workspace {
   id: string;
   name: string;

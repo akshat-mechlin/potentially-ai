@@ -143,7 +143,7 @@ export default function IntrosPage() {
           </MobileMenuList>
         )}
 
-        <MobileFab onClick={() => setOpen(true)} label="Request introduction">
+        <MobileFab onClick={() => setOpen(true)} label="Request intro">
           <Plus className="h-6 w-6" />
         </MobileFab>
         {requestDialog}
@@ -155,7 +155,7 @@ export default function IntrosPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sub text-muted-foreground">Track and manage warm introduction requests</p>
-        <Button onClick={() => setOpen(true)}>Request Introduction</Button>
+        <Button onClick={() => setOpen(true)}>Request intro</Button>
       </div>
 
       {isLoading ? (

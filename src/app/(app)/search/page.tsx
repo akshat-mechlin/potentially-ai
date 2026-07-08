@@ -8,7 +8,8 @@ import { DesktopOnly } from "@/components/mobile/primitives";
 function SearchPageContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
-  return <SearchInterface initialQuery={initialQuery} />;
+  const initialGroupId = searchParams.get("group") ?? undefined;
+  return <SearchInterface initialQuery={initialQuery} initialGroupId={initialGroupId} />;
 }
 
 export default function SearchPage() {

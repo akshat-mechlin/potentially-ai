@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { getPlaybookRun, listRunProspects } from "@/lib/data/playbooks";
+import { getUserWorkspaceContext } from "@/lib/data/workspace";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ runId: string }> },
 ) {
   try {
+    const { user } = await getUserWorkspaceContext();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { runId } = await params;
     const run = await getPlaybookRun(runId);
     if (!run) {

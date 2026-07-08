@@ -16,6 +16,7 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import type { Playbook, PlaybookProspect } from "@/types/playbooks";
 import { toast } from "sonner";
+import { playbookRunHref } from "@/lib/routes/playbook-runs";
 
 type ProspectTab = "conversation" | "email" | "calendly";
 
@@ -66,29 +67,14 @@ export default function ProspectDetailPage() {
         { method: "POST" },
       );
       if (!res.ok) throw new Error("Failed");
-      toast.success("Marked as booked");
+      toast.success("Meeting booked — follow-ups stopped");
       queryClient.invalidateQueries({ queryKey: ["prospect-search"] });
-    } catch {
-      toast.error("Failed to mark booked");
-    }
-  };
-
-  const simulateReply = async () => {
-    try {
-      const res = await fetch("/api/playbooks/replies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          run_contact_id: prospectId,
-          body: "Thanks — let's find time next week.",
-        }),
-      });
-      if (!res.ok) throw new Error("Failed");
-      toast.success("Reply recorded");
-      queryClient.invalidateQueries({ queryKey: ["prospect-search"] });
+      queryClient.invalidateQueries({ queryKey: ["playbook-run", runId] });
       queryClient.invalidateQueries({ queryKey: ["prospect-thread", runId, prospectId] });
+      queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
     } catch {
-      toast.error("Failed to simulate reply");
+      toast.error("Could not save booking automatically");
     }
   };
 
@@ -106,7 +92,7 @@ export default function ProspectDetailPage() {
 
   if (isMobileApp) {
     const backHref = runId
-      ? `/playbooks/${playbookId}/runs/${runId}`
+      ? playbookRunHref(runId)
       : `/playbooks/${playbookId}/runs`;
 
     return (
@@ -161,15 +147,13 @@ export default function ProspectDetailPage() {
 
         {activeTab === "calendly" && calendlyUrl && (
           <div className="flex-1 overflow-y-auto p-4">
-            <CalendlyEmbed url={calendlyUrl} onBooked={markBooked} />
-          </div>
-        )}
-
-        {activeTab === "conversation" && prospect.status === "sent" && (
-          <div className="desktop-only border-t border-border bg-card px-4 py-2">
-            <Button variant="outline" size="sm" className="w-full" onClick={simulateReply}>
-              Simulate reply
-            </Button>
+            <CalendlyEmbed
+              url={calendlyUrl}
+              onBooked={markBooked}
+              prefillEmail={prospect.contact?.email}
+              prefillName={prospect.contact?.full_name}
+              trackingId={prospectId}
+            />
           </div>
         )}
       </div>
@@ -180,7 +164,7 @@ export default function ProspectDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="sm" asChild>
-          <Link href={runId ? `/playbooks/${playbookId}/runs/${runId}` : `/playbooks/${playbookId}/runs`}>
+          <Link href={runId ? playbookRunHref(runId) : `/playbooks/${playbookId}/runs`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             {runId ? "Back to run" : "Back to runs"}
           </Link>
@@ -220,11 +204,6 @@ export default function ProspectDetailPage() {
 
         <TabsContent value="conversation" className="space-y-4">
           {runId && <ProspectChat runId={runId} prospectId={prospectId} />}
-          {prospect.status === "sent" && (
-            <Button variant="outline" size="sm" onClick={simulateReply}>
-              Simulate inbound reply (test)
-            </Button>
-          )}
         </TabsContent>
 
         <TabsContent value="email">
@@ -240,7 +219,13 @@ export default function ProspectDetailPage() {
 
         {calendlyUrl && (
           <TabsContent value="calendly">
-            <CalendlyEmbed url={calendlyUrl} onBooked={markBooked} />
+            <CalendlyEmbed
+              url={calendlyUrl}
+              onBooked={markBooked}
+              prefillEmail={prospect.contact?.email}
+              prefillName={prospect.contact?.full_name}
+              trackingId={prospectId}
+            />
           </TabsContent>
         )}
       </Tabs>

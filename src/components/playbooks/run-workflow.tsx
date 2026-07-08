@@ -115,6 +115,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
   const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
   const [selectedProspects, setSelectedProspects] = useState<Set<string>>(new Set());
+  const [selectedSkipped, setSelectedSkipped] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { subject: string; body: string }>>({});
 
@@ -165,6 +166,17 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
     });
   };
 
+  const toggleSkippedProspect = (prospectId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedSkipped((prev) => {
+      const next = new Set(prev);
+      if (next.has(prospectId)) next.delete(prospectId);
+      else next.add(prospectId);
+      return next;
+    });
+  };
+
   const finalizeSelection = async () => {
     if (!selectedProspects.size) return;
     setBusy("finalize");
@@ -180,6 +192,27 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       refetch();
     } catch {
       toast.error("Failed to finalize selection");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const includeSkippedSelection = async () => {
+    if (!selectedSkipped.size) return;
+    setBusy("include-skipped");
+    try {
+      const res = await fetch(`/api/playbooks/runs/${runId}/include-skipped`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prospect_ids: [...selectedSkipped] }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Failed to include prospects");
+      toast.success(`${payload.included ?? selectedSkipped.size} contact(s) added to the run`);
+      setSelectedSkipped(new Set());
+      refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to include skipped contacts");
     } finally {
       setBusy(null);
     }
@@ -340,25 +373,54 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
 
       {(skippedProspects.length > 0 || !isMobileApp) && (
       <section className="mobile-section">
-        <p className="mobile-section-label">
-          {isMobileApp ? `Skipped · ${skippedProspects.length}` : `Skipped / deduped (${skippedProspects.length})`}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="mobile-section-label">
+            {isMobileApp ? `Skipped · ${skippedProspects.length}` : `Skipped / deduped (${skippedProspects.length})`}
+          </p>
+          {skippedProspects.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={includeSkippedSelection}
+              disabled={!selectedSkipped.size || busy === "include-skipped"}
+              className={isMobileApp ? "h-8 rounded-full px-3 text-xs" : ""}
+            >
+              <CheckSquare className="mr-1 h-3.5 w-3.5" />
+              {isMobileApp
+                ? `Include (${selectedSkipped.size})`
+                : `Include ${selectedSkipped.size} in run`}
+            </Button>
+          )}
+        </div>
         {skippedProspects.length ? (
-          skippedProspects.slice(0, 20).map((prospect) => (
-            <ProspectLinkCard
-              key={prospect.id}
-              playbookId={playbookId}
-              prospect={prospect}
-              mobile={isMobileApp}
-              trailing={<Badge variant="secondary">{prospect.skip_reason ?? "skipped"}</Badge>}
-            />
+          skippedProspects.map((prospect) => (
+            <div key={prospect.id} className="relative">
+              <ProspectLinkCard
+                playbookId={playbookId}
+                prospect={prospect}
+                mobile={isMobileApp}
+                trailing={
+                  <>
+                    <Badge variant="secondary">{prospect.skip_reason ?? "skipped"}</Badge>
+                    <input
+                      type="checkbox"
+                      checked={selectedSkipped.has(prospect.id)}
+                      onClick={(e) => toggleSkippedProspect(prospect.id, e)}
+                      onChange={() => {}}
+                      className="h-4 w-4 rounded border-border"
+                      aria-label={`Include ${prospect.contact?.full_name}`}
+                    />
+                  </>
+                }
+              />
+            </div>
           ))
         ) : (
           !isMobileApp && (
             <EmptySection
               icon={Users}
               title="No skipped contacts"
-              description="Contacts skipped by dedupe or cooldown rules will appear here."
+              description="Contacts skipped by dedupe or cooldown rules will appear here. You can manually include them to continue the run."
             />
           )
         )}
@@ -388,7 +450,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
           <EmptySection
             icon={Sparkles}
             title="No prospects finalized yet"
-            description="Select matched prospects above and click Finalize to prepare drafts."
+            description="Select matched prospects above and click Finalize, or include skipped contacts manually, then generate drafts."
           />
         )}
       </section>

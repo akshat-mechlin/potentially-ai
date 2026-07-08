@@ -124,7 +124,8 @@ async function seedWorkspace(userId: string) {
 
   for (const contact of contacts) {
     let embedding: number[] | undefined;
-    if (process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes("your-")) {
+    const { isAIConfigured } = await import("../src/lib/ai");
+    if (isAIConfigured()) {
       try {
         const { buildContactEmbedding } = await import("../src/lib/data/embeddings");
         embedding = await buildContactEmbedding(contact);

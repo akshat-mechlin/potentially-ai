@@ -5,8 +5,9 @@ import type { Workspace, SearchResult } from "@/types";
 interface WorkspaceState {
   currentWorkspace: Workspace | null;
   workspaces: Workspace[];
-  setCurrentWorkspace: (workspace: Workspace) => void;
+  setCurrentWorkspace: (workspace: Workspace | null) => void;
   setWorkspaces: (workspaces: Workspace[]) => void;
+  removeWorkspace: (workspaceId: string) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -16,6 +17,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       workspaces: [],
       setCurrentWorkspace: (workspace) => set({ currentWorkspace: workspace }),
       setWorkspaces: (workspaces) => set({ workspaces }),
+      removeWorkspace: (workspaceId) =>
+        set((state) => {
+          const workspaces = state.workspaces.filter((workspace) => workspace.id !== workspaceId);
+          const currentWorkspace =
+            state.currentWorkspace?.id === workspaceId
+              ? (workspaces[0] ?? null)
+              : state.currentWorkspace;
+          return { workspaces, currentWorkspace };
+        }),
     }),
     { name: "potentially-workspace" },
   ),

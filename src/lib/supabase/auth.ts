@@ -25,7 +25,12 @@ export async function safeGetUser(supabase: SupabaseClient): Promise<{
     const { data, error } = await supabase.auth.getUser();
 
     if (error) {
-      console.error("Supabase getUser error:", error.message);
+      const message = error.message?.toLowerCase() ?? "";
+      const isMissingSession =
+        message.includes("auth session missing") || message.includes("jwt expired");
+      if (!isMissingSession) {
+        console.error("Supabase getUser error:", error.message);
+      }
       return { user: null, networkError: false };
     }
 

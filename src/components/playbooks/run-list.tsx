@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { playbookRunHref } from "@/lib/routes/playbook-runs";
 import type { PlaybookRun } from "@/types/playbooks";
 
 interface RunListProps {
@@ -29,7 +30,7 @@ export function RunList({ playbookId, runs }: RunListProps) {
     return (
       <div className="space-y-2">
         {runs.map((run) => (
-          <Link key={run.id} href={`/playbooks/${playbookId}/runs/${run.id}`} className="block">
+          <Link key={run.id} href={playbookRunHref(run.id)} className="block">
             <div className="mobile-list-row">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{new Date(run.created_at).toLocaleString()}</p>
@@ -52,7 +53,7 @@ export function RunList({ playbookId, runs }: RunListProps) {
   return (
     <div className="space-y-2">
       {runs.map((run) => (
-        <Link key={run.id} href={`/playbooks/${playbookId}/runs/${run.id}`} className="block">
+        <Link key={run.id} href={playbookRunHref(run.id)} className="block">
           <Card className="transition-all hover:border-primary/40 hover:shadow-sm">
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div className="min-w-0">

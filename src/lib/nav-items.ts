@@ -12,6 +12,7 @@ import {
   Cable,
   BookOpen,
   ListFilter,
+  MessageSquare,
 } from "lucide-react";
 
 export interface NavItem {
@@ -35,6 +36,7 @@ export const agentModeNav = {
   items: [
     { href: "/playbooks", label: "Playbooks", icon: BookOpen },
     { href: "/segments", label: "Segments", icon: ListFilter },
+    { href: "/chats", label: "Chats", icon: MessageSquare },
   ] satisfies AgentModeNavItem[],
 };
 
@@ -64,6 +66,7 @@ export function getPageTitle(pathname: string): string {
   if (agentMatch) {
     const playbookTitle = getPlaybookPageTitle(pathname);
     if (playbookTitle) return playbookTitle;
+    if (pathname.startsWith("/chats/")) return "Chat";
     return agentMatch.label;
   }
 

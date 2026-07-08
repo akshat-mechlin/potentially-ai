@@ -161,8 +161,8 @@ function ContactDetailContent({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cold_email">Cold Email</SelectItem>
-              <SelectItem value="warm_intro">Warm Intro</SelectItem>
+              <SelectItem value="cold_email">Cold email</SelectItem>
+              <SelectItem value="warm_intro">Warm intro</SelectItem>
               <SelectItem value="linkedin">LinkedIn Message</SelectItem>
             </SelectContent>
           </Select>
@@ -409,7 +409,7 @@ function ContactDetailContent({
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Mutual Connections</CardTitle>
+              <CardTitle className="text-base">Mutual connections</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {mutualContacts.map((c) => (
@@ -467,7 +467,7 @@ function ContactDetailContent({
         <TabsContent value="outreach" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Generate Outreach</CardTitle>
+              <CardTitle className="text-base">Generate outreach</CardTitle>
             </CardHeader>
             <CardContent>{outreachForm}</CardContent>
           </Card>

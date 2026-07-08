@@ -1,3 +1,4 @@
+import { getThreadForRunContact, getThreadMessages } from "@/lib/data/conversation-threads";
 import { isDataDemoMode } from "@/lib/app-config";
 import {
   getDemoPlaybooks,
@@ -394,6 +395,80 @@ export async function finalizeRunProspects(runId: string, prospectIds: string[])
   });
 }
 
+export async function includeSkippedProspects(runId: string, prospectIds: string[]) {
+  if (!prospectIds.length) return { included: 0 };
+
+  if (isDataDemoMode()) {
+    prospectIds.forEach((id) =>
+      updateDemoProspect(id, {
+        status: "selected",
+        skip_reason: undefined,
+        match_reason: "Manually included from skipped list",
+        last_action_at: new Date().toISOString(),
+      }),
+    );
+    return { included: prospectIds.length };
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  const { data: rows, error: fetchError } = await supabase
+    .from("playbook_run_contacts")
+    .select("id")
+    .eq("run_id", runId)
+    .eq("status", "skipped")
+    .in("id", prospectIds);
+
+  if (fetchError) throw fetchError;
+
+  const validIds = (rows ?? []).map((row) => row.id as string);
+  if (!validIds.length) {
+    throw new Error("No skipped prospects selected");
+  }
+
+  const { error: updateError } = await supabase
+    .from("playbook_run_contacts")
+    .update({
+      status: "selected",
+      skip_reason: null,
+      match_reason: "Manually included from skipped list",
+      last_action_at: new Date().toISOString(),
+    })
+    .eq("run_id", runId)
+    .in("id", validIds);
+
+  if (updateError) throw updateError;
+
+  const { data: run } = await supabase
+    .from("playbook_runs")
+    .select("stats, status")
+    .eq("id", runId)
+    .maybeSingle();
+
+  const stats = (run?.stats as Record<string, number> | null) ?? {};
+  const nextStats = {
+    ...stats,
+    selected: (stats.selected ?? 0) + validIds.length,
+    skipped: Math.max(0, (stats.skipped ?? 0) - validIds.length),
+  };
+
+  await supabase
+    .from("playbook_runs")
+    .update({
+      status: run?.status === "review" ? "finalized" : run?.status,
+      stats: nextStats,
+    })
+    .eq("id", runId);
+
+  await logAuditEvent("playbook.skipped_included", "playbook_run", runId, {
+    included: validIds.length,
+    prospect_ids: validIds,
+  });
+
+  return { included: validIds.length };
+}
+
 export async function getRunProspect(prospectId: string): Promise<PlaybookProspect | null> {
   if (isDataDemoMode()) {
     const { getDemoProspectById } = await import("@/lib/demo-store/playbooks");
@@ -463,26 +538,100 @@ export async function postThreadMessage(runContactId: string, body: string) {
   const { supabase, user, workspaceId } = await getUserWorkspaceContext();
   if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
+  const existingThread = await getThreadForRunContact(supabase, runContactId, user.id);
+
+  if (existingThread?.recipient_user_id === user.id) {
+    await supabase.from("thread_messages").insert({
+      thread_id: existingThread.id,
+      sender_user_id: user.id,
+      body,
+      message_type: "platform_inbound",
+      metadata: {},
+    });
+    await supabase
+      .from("conversation_threads")
+      .update({ last_message_at: new Date().toISOString() })
+      .eq("id", existingThread.id);
+    return;
+  }
+
   const { data: prospect } = await supabase
     .from("playbook_run_contacts")
-    .select("contact_id")
+    .select(
+      "contact_id, contact:contacts(id, full_name, email)",
+    )
     .eq("id", runContactId)
     .maybeSingle();
 
   if (!prospect) throw new Error("Prospect not found");
 
-  const thread = await ensureThread(supabase, workspaceId, prospect.contact_id, runContactId);
+  const contactRaw = prospect.contact as
+    | { id: string; full_name: string; email: string | null }
+    | { id: string; full_name: string; email: string | null }[]
+    | null;
+  const contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;
+  if (!contact) throw new Error("Prospect not found");
+
+  const { resolveChatDelivery, emailChatToContact } = await import("@/lib/data/chat-delivery");
+  const delivery = await resolveChatDelivery(contact.email);
+
+  const [{ data: profile }, { data: workspace }] = await Promise.all([
+    supabase.from("profiles").select("name, email").eq("id", user.id).maybeSingle(),
+    supabase.from("workspaces").select("name").eq("id", workspaceId).maybeSingle(),
+  ]);
+
+  const senderName =
+    (profile?.name as string | null) ??
+    (profile?.email as string | null)?.split("@")[0] ??
+    "Someone";
+
+  const thread = await ensureThread(
+    supabase,
+    workspaceId,
+    contact.id,
+    runContactId,
+    {
+      recipientUserId: delivery.recipientUserId,
+      initiatorUserId: user.id,
+      initiatorDisplayName: senderName,
+      initiatorWorkspaceName: (workspace?.name as string | null) ?? null,
+    },
+  );
+
+  if (delivery.recipientUserId && thread.recipient_user_id !== delivery.recipientUserId) {
+    await supabase
+      .from("conversation_threads")
+      .update({ recipient_user_id: delivery.recipientUserId })
+      .eq("id", thread.id);
+  }
+
+  const messageType =
+    delivery.mode === "platform" ? "platform_outbound" : "outbound_chat_email";
+
   await supabase.from("thread_messages").insert({
     thread_id: thread.id,
     sender_user_id: user.id,
     body,
-    message_type: "text",
-    metadata: {},
+    message_type: messageType,
+    metadata: { delivery_mode: delivery.mode },
   });
   await supabase
     .from("conversation_threads")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", thread.id);
+
+  if (delivery.mode === "email" && contact.email) {
+    await emailChatToContact({
+      to: contact.email,
+      recipientName: contact.full_name,
+      senderName,
+      senderEmail: (profile?.email as string | null) ?? user.email ?? null,
+      senderWorkspaceName: (workspace?.name as string | null) ?? null,
+      workspaceId,
+      body,
+      runContactId,
+    });
+  }
 }
 
 export async function generateProspectDrafts(runId: string, playbook: Playbook) {
@@ -592,7 +741,7 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     return { sent: true, demo: true };
   }
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  const { supabase, user, workspaceId, profile } = await getUserWorkspaceContext();
   if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
   if (run?.dry_run) {
@@ -627,19 +776,60 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
   }
 
   const { sendEmail } = await import("@/lib/email/send");
+  const { getWorkspaceEmailSettingsForSend } = await import("@/lib/data/workspace-email-settings");
+  const { resolveOutboundFromAddress } = await import("@/lib/email/from-address");
+
+  const emailSettings = await getWorkspaceEmailSettingsForSend(supabase, workspaceId);
+  if (
+    emailSettings.mode === "custom" &&
+    emailSettings.senderDomainStatus !== "verified"
+  ) {
+    throw new Error(
+      "Your send domain is not verified yet. Open Settings → Email to finish DNS setup, or switch to Potentially email.",
+    );
+  }
+
+  const { from, replyTo } = resolveOutboundFromAddress(
+    emailSettings,
+    user.email ?? profile?.email,
+  );
+
   const subject = prospect.draft_subject ?? "Hello from Potentially";
   const body = prospect.draft_body ?? "";
   const html = body.replace(/\n/g, "<br>");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const unsubscribeUrl = `${appUrl}/unsubscribe?contact=${prospect.contact_id}`;
 
+  const calendlyBase =
+    playbook?.calendly_url ??
+    (typeof playbook?.settings?.calendly_url === "string"
+      ? playbook.settings.calendly_url
+      : null) ??
+    process.env.NEXT_PUBLIC_CALENDLY_URL ??
+    null;
+  let calendlyBlock = "";
+  if (calendlyBase) {
+    try {
+      const calendlyUrl = new URL(calendlyBase);
+      calendlyUrl.searchParams.set("utm_source", "potentially");
+      calendlyUrl.searchParams.set("utm_content", prospectId);
+      if (prospect.contact.email) calendlyUrl.searchParams.set("email", prospect.contact.email);
+      if (prospect.contact.full_name) calendlyUrl.searchParams.set("name", prospect.contact.full_name);
+      calendlyBlock = `<br><br><p><a href="${calendlyUrl.toString()}">Book a time that works for you</a></p>`;
+    } catch {
+      calendlyBlock = `<br><br><p><a href="${calendlyBase}">Book a time that works for you</a></p>`;
+    }
+  }
+
   const emailResult = await sendEmail({
     to: prospect.contact.email,
     subject,
-    html: `${html}<br><br><small><a href="${unsubscribeUrl}">Unsubscribe</a></small>`,
+    html: `${html}${calendlyBlock}<br><br><small><a href="${unsubscribeUrl}">Unsubscribe</a></small>`,
     headers: {
       "X-Potentially-Run-Contact": prospectId,
     },
+    from,
+    replyTo,
   });
 
   const { data: outbound } = await supabase
@@ -676,7 +866,7 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     sender_user_id: user.id,
     body: `Email sent: ${subject}`,
     message_type: "system",
-    metadata: { channel: "email", provider_message_id: emailResult?.id },
+    metadata: { channel: "email", audience: "sender", provider_message_id: emailResult?.id },
   });
 
   await logAuditEvent("playbook.email_sent", "playbook_run_contact", prospectId, {
@@ -723,15 +913,44 @@ async function ensureThread(
   workspaceId: string,
   contactId: string,
   runContactId: string,
+  options?: {
+    recipientUserId?: string | null;
+    initiatorUserId?: string;
+    initiatorDisplayName?: string | null;
+    initiatorWorkspaceName?: string | null;
+  },
 ) {
   const { data: existing } = await supabase
     .from("conversation_threads")
     .select("*")
+    .eq("workspace_id", workspaceId)
     .eq("contact_id", contactId)
-    .eq("run_contact_id", runContactId)
     .maybeSingle();
 
-  if (existing) return existing;
+  if (existing) {
+    const patch: Record<string, unknown> = {};
+    if (existing.run_contact_id !== runContactId) {
+      patch.run_contact_id = runContactId;
+    }
+    if (options?.recipientUserId && !existing.recipient_user_id) {
+      patch.recipient_user_id = options.recipientUserId;
+    }
+    if (options?.initiatorUserId && !existing.initiator_user_id) {
+      patch.initiator_user_id = options.initiatorUserId;
+      patch.initiator_display_name = options.initiatorDisplayName ?? null;
+      patch.initiator_workspace_name = options.initiatorWorkspaceName ?? null;
+    }
+    if (Object.keys(patch).length) {
+      const { data: updated } = await supabase
+        .from("conversation_threads")
+        .update(patch)
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+      return updated ?? existing;
+    }
+    return existing;
+  }
 
   const { data, error } = await supabase
     .from("conversation_threads")
@@ -739,6 +958,10 @@ async function ensureThread(
       workspace_id: workspaceId,
       contact_id: contactId,
       run_contact_id: runContactId,
+      recipient_user_id: options?.recipientUserId ?? null,
+      initiator_user_id: options?.initiatorUserId ?? null,
+      initiator_display_name: options?.initiatorDisplayName ?? null,
+      initiator_workspace_name: options?.initiatorWorkspaceName ?? null,
     })
     .select("*")
     .single();
@@ -772,23 +995,70 @@ export async function getProspectThreadMessages(runContactId: string) {
     return getDemoThreadMessages(runContactId);
   }
 
-  const { supabase } = await getUserWorkspaceContext();
-  if (!supabase) return [];
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) return [];
 
-  const { data: thread } = await supabase
-    .from("conversation_threads")
-    .select("id")
-    .eq("run_contact_id", runContactId)
-    .maybeSingle();
-
+  const thread = await getThreadForRunContact(supabase, runContactId, user.id);
   if (!thread) return [];
 
-  const { data, error } = await supabase
-    .from("thread_messages")
-    .select("*")
-    .eq("thread_id", thread.id)
-    .order("created_at", { ascending: true });
+  return getThreadMessages(supabase, thread.id);
+}
 
-  if (error) throw error;
-  return data ?? [];
+export async function getProspectThreadContext(runContactId: string) {
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) {
+    return {
+      delivery_mode: null,
+      recipient_on_platform: false,
+      viewer_role: "sender" as const,
+    };
+  }
+
+  const thread = await getThreadForRunContact(supabase, runContactId, user.id);
+
+  if (thread?.recipient_user_id === user.id) {
+    return {
+      delivery_mode: "platform" as const,
+      recipient_on_platform: true,
+      viewer_role: "recipient" as const,
+    };
+  }
+
+  if (thread?.recipient_user_id) {
+    return {
+      delivery_mode: "platform" as const,
+      recipient_on_platform: true,
+      viewer_role: "sender" as const,
+    };
+  }
+
+  let contactEmail: string | null = null;
+  if (thread?.contact_id) {
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("email")
+      .eq("id", thread.contact_id)
+      .maybeSingle();
+    contactEmail = (contact?.email as string | null) ?? null;
+  } else {
+    const { data: prospect } = await supabase
+      .from("playbook_run_contacts")
+      .select("contact:contacts(email)")
+      .eq("id", runContactId)
+      .maybeSingle();
+    const contactRaw = prospect?.contact as
+      | { email: string | null }
+      | { email: string | null }[]
+      | null;
+    contactEmail = Array.isArray(contactRaw) ? contactRaw[0]?.email ?? null : contactRaw?.email ?? null;
+  }
+
+  const { resolveChatDelivery } = await import("@/lib/data/chat-delivery");
+  const delivery = await resolveChatDelivery(contactEmail);
+
+  return {
+    delivery_mode: delivery.mode,
+    recipient_on_platform: delivery.recipientOnPlatform,
+    viewer_role: "sender" as const,
+  };
 }

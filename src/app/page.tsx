@@ -7,25 +7,25 @@ import { Button } from "@/components/ui/button";
 const features = [
   {
     icon: Search,
-    title: "AI-Powered Search",
+    title: "AI-powered search",
     description:
       "Ask natural language questions about your network. Find founders, CTOs, investors, and warm paths instantly.",
   },
   {
     icon: Network,
-    title: "Relationship Graph",
+    title: "Relationship graph",
     description:
       "Visualize your entire network. See connections, mutual contacts, and introduction paths at a glance.",
   },
   {
     icon: Handshake,
-    title: "Warm Introductions",
+    title: "Warm introductions",
     description:
       "Discover who can introduce you to anyone. Request intros and track outcomes across your team.",
   },
   {
     icon: Zap,
-    title: "Smart Outreach",
+    title: "Smart outreach",
     description:
       "Generate personalized emails, LinkedIn messages, and intro requests with AI that knows your context.",
   },

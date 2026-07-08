@@ -16,9 +16,11 @@
     "test:e2e": "playwright test",
     "prepare": "husky",
     "seed": "npx tsx scripts/seed.ts",
-    "db:validate": "npx tsx scripts/validate-migrations.ts"
+    "db:validate": "npx tsx scripts/validate-migrations.ts",
+    "calendly:webhook": "npx tsx scripts/setup-calendly-webhook.ts"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.4.0",
     "@radix-ui/react-avatar": "^1.2.0",
     "@radix-ui/react-checkbox": "^1.3.5",

@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { EmailSenderSettings } from "@/components/settings/email-sender-settings";
 
 const SETTINGS_KEY = "potentially-notification-prefs";
 
@@ -27,7 +28,7 @@ type NotificationPrefs = {
   sync: boolean;
 };
 
-type SettingsTab = "profile" | "playbooks" | "notifications" | "appearance";
+type SettingsTab = "profile" | "email" | "playbooks" | "notifications" | "appearance";
 
 const defaultNotifications: NotificationPrefs = {
   email: true,
@@ -189,6 +190,8 @@ export default function SettingsPage() {
       )}
     </div>
   );
+
+  const emailPanel = <EmailSenderSettings compact={isMobileApp} />;
 
   const playbooksPanel = (
     <div className={isMobileApp ? "mobile-card-flat space-y-4 p-4 text-sm text-muted-foreground" : "space-y-4"}>
@@ -372,12 +375,14 @@ export default function SettingsPage() {
           onChange={setActiveTab}
           options={[
             { value: "profile", label: "Profile" },
+            { value: "email", label: "Email" },
             { value: "playbooks", label: "Playbooks" },
             { value: "notifications", label: "Alerts" },
             { value: "appearance", label: "Look" },
           ]}
         />
         {activeTab === "profile" && profilePanel}
+        {activeTab === "email" && emailPanel}
         {activeTab === "playbooks" && playbooksPanel}
         {activeTab === "notifications" && notificationsPanel}
         {activeTab === "appearance" && appearancePanel}
@@ -394,12 +399,14 @@ export default function SettingsPage() {
       <Tabs defaultValue="profile">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="email">Email</TabsTrigger>
           <TabsTrigger value="playbooks">Playbooks</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">{profilePanel}</TabsContent>
+        <TabsContent value="email">{emailPanel}</TabsContent>
         <TabsContent value="playbooks">{playbooksPanel}</TabsContent>
         <TabsContent value="notifications">{notificationsPanel}</TabsContent>
         <TabsContent value="appearance">{appearancePanel}</TabsContent>

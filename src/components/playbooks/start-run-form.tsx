@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import type { PlaybookRun, Segment } from "@/types/playbooks";
+import { playbookRunHref } from "@/lib/routes/playbook-runs";
 import { toast } from "sonner";
 
 interface StartRunFormProps {
@@ -55,7 +56,7 @@ export function StartRunForm({ playbookId, compact }: StartRunFormProps) {
       const run = (await res.json()) as PlaybookRun;
       toast.success(`${run.stats?.matched ?? 0} matched`);
       queryClient.invalidateQueries({ queryKey: ["playbook", playbookId] });
-      router.push(`/playbooks/${playbookId}/runs/${run.id}`);
+      router.push(playbookRunHref(run.id));
     } catch {
       toast.error("Failed to start run");
     } finally {

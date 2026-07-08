@@ -91,7 +91,7 @@ export function WorkspaceInviteModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Invite your friends</DialogTitle>
+          <DialogTitle>Invite members</DialogTitle>
           <DialogDescription>
             People you may want to invite to {displayName}
           </DialogDescription>

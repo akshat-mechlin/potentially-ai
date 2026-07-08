@@ -242,7 +242,7 @@ export default function AdminPage() {
   const flagsPanel = (
     <Card className={isMobileApp ? "mobile-card-flat border-0 shadow-none" : undefined}>
       <CardHeader className={isMobileApp ? "px-4 pt-4 pb-2" : undefined}>
-        <CardTitle className="text-base">Feature Flags</CardTitle>
+        <CardTitle className="text-base">Feature flags</CardTitle>
         <CardDescription>Toggle platform capabilities for all users</CardDescription>
       </CardHeader>
       <CardContent className={isMobileApp ? "space-y-3 px-4 pb-4" : "space-y-3"}>

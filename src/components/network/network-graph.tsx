@@ -288,7 +288,7 @@ export function NetworkGraph({ data }: NetworkGraphProps) {
       <CardHeader className="space-y-4 border-b border-border bg-card pb-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <CardTitle>Relationship Graph</CardTitle>
+            <CardTitle>Relationship graph</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Hover to highlight · drag to rearrange · scroll to zoom · click for details
             </p>

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Users, Plus, Loader2, Cable, ArrowRight, Building2, Check } from "lucide-react";
+import { Plus, Loader2, Cable, ArrowRight, Building2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,18 +40,6 @@ const groupSchema = z.object({
   name: z.string().min(1, "Group name is required"),
 });
 
-type GroupsDashboardResponse = {
-  workspaces: WorkspaceSummary[];
-  activeWorkspace: WorkspaceSummary | null;
-  members: Array<{
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    connections_count: number;
-  }>;
-};
-
 function formatRole(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
@@ -65,19 +53,12 @@ export default function GroupsPage() {
   const handledCreateAction = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteWorkspace, setInviteWorkspace] = useState<{ id: string; name: string } | null>(
-    null,
-  );
-  const { currentWorkspace, switchWorkspace, refreshWorkspaces } = useWorkspaces();
+  const [inviteWorkspace, setInviteWorkspace] = useState<{ id: string; name: string } | null>(null);
+  const { refreshWorkspaces } = useWorkspaces();
 
-  const workspaceId = currentWorkspace?.id;
-
-  const { data, isLoading } = useQuery<GroupsDashboardResponse>({
-    queryKey: ["workspace-dashboard", workspaceId],
-    queryFn: () =>
-      fetch(`/api/workspace${workspaceId ? `?workspace_id=${workspaceId}` : ""}`).then((r) =>
-        r.json(),
-      ),
+  const { data: workspacesData, isLoading: workspacesLoading, refetch: refetchWorkspaces } = useQuery<{ workspaces: WorkspaceSummary[] }>({
+    queryKey: ["workspaces"],
+    queryFn: () => fetch("/api/workspaces", { cache: "no-store" }).then((r) => r.json()),
     enabled: mounted,
   });
 
@@ -134,28 +115,19 @@ export default function GroupsPage() {
       reset();
       await refreshWorkspaces();
       if (result.id) {
-        switchWorkspace(result);
         setInviteWorkspace({ id: result.id, name: result.name ?? formData.name });
         setInviteOpen(true);
+        queryClient.invalidateQueries({ queryKey: ["workspace-detail", result.id] });
       }
-      queryClient.invalidateQueries({ queryKey: ["workspace-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create group");
     }
   };
 
-  const openInviteModal = () => {
-    if (!activeWorkspace) return;
-    setInviteWorkspace({ id: activeWorkspace.id, name: activeWorkspace.name });
-    setInviteOpen(true);
-  };
-
-  const workspaces = data?.workspaces ?? [];
-  const members = data?.members ?? [];
-  const activeWorkspace =
-    workspaces.find((workspace) => workspace.id === workspaceId) ?? data?.activeWorkspace ?? null;
+  const workspaces = workspacesData?.workspaces ?? [];
   const connectedCount = connectorsData?.stats?.connected ?? 0;
-  const loading = !mounted || isLoading;
+  const loading = !mounted || workspacesLoading;
 
   const createDialog = (
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -163,13 +135,13 @@ export default function GroupsPage() {
         <DialogTrigger asChild>
           <Button size="sm">
             <Plus className="mr-2 h-4 w-4" />
-            New Group
+            New group
           </Button>
         </DialogTrigger>
       )}
       <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
         <DialogHeader>
-          <DialogTitle>Create Group</DialogTitle>
+          <DialogTitle>Create group</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onCreateGroup)} className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
           <div className="space-y-2">
@@ -188,6 +160,26 @@ export default function GroupsPage() {
     </Dialog>
   );
 
+  const groupRows = workspaces.map((workspace) => (
+    <Link
+      key={workspace.id}
+      href={`/groups/${workspace.id}`}
+      className="group flex items-center gap-3 rounded-lg border border-border/80 px-3 py-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <Building2 className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{workspace.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatRole(workspace.role)} · {workspace.member_count} member
+          {workspace.member_count === 1 ? "" : "s"} · {workspace.plan ?? "free"}
+        </p>
+      </div>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+    </Link>
+  ));
+
   if (isMobileApp) {
     return (
       <>
@@ -200,46 +192,16 @@ export default function GroupsPage() {
             </div>
           ) : (
             <>
+              <p className="px-1 text-xs text-muted-foreground">
+                Search combines contacts from every group you belong to. Tap a group for insights and settings.
+              </p>
+
               <MobileMenuList>
                 <MobileSectionLabel>Your groups</MobileSectionLabel>
                 {workspaces.length === 0 ? (
                   <MobileEmpty>No groups yet</MobileEmpty>
                 ) : (
-                  workspaces.map((workspace) => {
-                    const isActive = workspace.id === activeWorkspace?.id;
-                    return (
-                      <div key={workspace.id} className="mobile-list-row">
-                        <span className="mobile-menu-item-icon-muted">
-                          <Building2 className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <p className="truncate font-medium">{workspace.name}</p>
-                            {isActive && (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                <Check className="h-2.5 w-2.5" />
-                                Active
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {formatRole(workspace.role)} · {workspace.member_count} members ·{" "}
-                            {workspace.plan ?? "free"}
-                          </p>
-                        </div>
-                        {!isActive && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 shrink-0 rounded-full px-3 text-xs"
-                            onClick={() => switchWorkspace(workspace)}
-                          >
-                            Switch
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })
+                  groupRows
                 )}
               </MobileMenuList>
 
@@ -257,44 +219,6 @@ export default function GroupsPage() {
                   }
                 />
               </MobileMenuList>
-
-              <MobileMenuList>
-                <MobileSectionLabel>
-                  {activeWorkspace ? activeWorkspace.name : "Team members"}
-                </MobileSectionLabel>
-                {members.length === 0 ? (
-                  <MobileEmpty>No members yet</MobileEmpty>
-                ) : (
-                  members.map((member) => (
-                    <div key={member.id} className="mobile-list-row">
-                      <span className="mobile-menu-item-icon-muted">
-                        <Users className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{member.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {member.connections_count} connection
-                          {member.connections_count === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-                        {member.role}
-                      </span>
-                    </div>
-                  ))
-                )}
-                <button
-                  type="button"
-                  className="mobile-menu-item w-full text-left"
-                  disabled={!activeWorkspace}
-                  onClick={openInviteModal}
-                >
-                  <span className="mobile-menu-item-icon">
-                    <Plus className="h-4 w-4" />
-                  </span>
-                  <span className="font-medium">Invite member</span>
-                </button>
-              </MobileMenuList>
             </>
           )}
         </div>
@@ -306,8 +230,8 @@ export default function GroupsPage() {
         <WorkspaceInviteModal
           open={inviteOpen}
           onOpenChange={setInviteOpen}
-          workspaceId={inviteWorkspace?.id ?? activeWorkspace?.id}
-          workspaceName={inviteWorkspace?.name ?? activeWorkspace?.name}
+          workspaceId={inviteWorkspace?.id}
+          workspaceName={inviteWorkspace?.name}
         />
       </>
     );
@@ -318,8 +242,7 @@ export default function GroupsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <DesktopOnly>
           <p className="text-sub text-muted-foreground">
-            Manage groups, invite teammates, and sync connectors. Search spans all groups you belong to
-            automatically.
+            Search spans all groups you belong to automatically. Open a group for members, stats, and management.
           </p>
         </DesktopOnly>
         {createDialog}
@@ -329,7 +252,7 @@ export default function GroupsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Building2 className="h-4 w-4" />
-            Your Groups
+            Your groups
           </CardTitle>
           <CardDescription className="text-xs">
             Starter tier is included at no cost.{" "}
@@ -341,9 +264,9 @@ export default function GroupsPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2">
               {Array.from({ length: 2 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
+                <Skeleton key={i} className="h-16 rounded-lg" />
               ))}
             </div>
           ) : workspaces.length === 0 ? (
@@ -356,133 +279,46 @@ export default function GroupsPage() {
             </div>
           ) : (
             <div
-              className={`grid gap-2 sm:grid-cols-2 lg:grid-cols-3 ${
-                workspaces.length > 9
-                  ? "max-h-[calc(9*3.25rem+2rem)] overflow-y-auto overscroll-y-contain pr-1 sm:max-h-[calc(5*3.25rem+1rem)] lg:max-h-[calc(3*3.25rem+0.5rem)]"
-                  : ""
+              className={`space-y-2 ${
+                workspaces.length > 6 ? "max-h-[28rem] overflow-y-auto overscroll-y-contain pr-1" : ""
               }`}
             >
-              {workspaces.map((workspace) => {
-                const isActive = workspace.id === activeWorkspace?.id;
-                return (
-                  <div
-                    key={workspace.id}
-                    className={`rounded-lg border px-3 py-2.5 ${
-                      isActive ? "border-primary/40 bg-primary/5" : "border-border/80"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="truncate text-sm font-medium">{workspace.name}</p>
-                          {isActive && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                              <Check className="h-2.5 w-2.5" />
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {formatRole(workspace.role)} · {workspace.member_count} member
-                          {workspace.member_count === 1 ? "" : "s"} · {workspace.plan ?? "free"}
-                        </p>
-                      </div>
-                      {!isActive && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 shrink-0 px-2 text-xs"
-                          onClick={() => switchWorkspace(workspace)}
-                        >
-                          Switch
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {groupRows}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-primary/20 bg-gradient-to-br from-card to-secondary/30">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Cable className="h-4 w-4 text-primary" />
-              Connectors
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              {connectedCount > 0
-                ? `${connectorsData?.stats?.accounts ?? connectedCount} linked accounts`
-                : "No accounts connected yet"}
-            </p>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/connectors">
-                Open
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4" />
-              Team Members
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {activeWorkspace ? activeWorkspace.name : "Group members"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {loading ? (
-              Array.from({ length: 2 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full rounded-lg" />
-              ))
-            ) : members.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No members yet.</p>
-            ) : (
-              members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between rounded-lg border border-border/80 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{member.name}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {member.connections_count} connection{member.connections_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-                    {member.role}
-                  </span>
-                </div>
-              ))
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={!activeWorkspace}
-              onClick={openInviteModal}
-            >
-              <Plus className="mr-2 h-3.5 w-3.5" />
-              Invite member
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-primary/20 bg-gradient-to-br from-card to-secondary/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Cable className="h-4 w-4 text-primary" />
+            Connectors
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Sync contacts from Google, Outlook, or CSV into your groups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {connectedCount > 0
+              ? `${connectorsData?.stats?.accounts ?? connectedCount} linked accounts`
+              : "No accounts connected yet"}
+          </p>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/connectors">
+              Open
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <WorkspaceInviteModal
         open={inviteOpen}
         onOpenChange={setInviteOpen}
-        workspaceId={inviteWorkspace?.id ?? activeWorkspace?.id}
-        workspaceName={inviteWorkspace?.name ?? activeWorkspace?.name}
+        workspaceId={inviteWorkspace?.id}
+        workspaceName={inviteWorkspace?.name}
       />
     </div>
   );

@@ -4,43 +4,43 @@ import { Search, Network, Handshake, Zap, Shield, Users, BarChart3 } from "lucid
 const features = [
   {
     icon: Search,
-    title: "Natural Language Search",
+    title: "Natural language search",
     description:
       "Ask questions like 'Find founders connected to me' or 'Who can introduce me to Stripe?' and get ranked results with reasoning.",
   },
   {
     icon: Network,
-    title: "Relationship Graph",
+    title: "Relationship graph",
     description:
       "Interactive network visualization showing contacts, companies, emails, meetings, and mutual connections with path finding.",
   },
   {
     icon: Handshake,
-    title: "Warm Introductions",
+    title: "Warm introductions",
     description:
       "Discover introduction paths through your network. Request, track, and manage warm intros across your team.",
   },
   {
     icon: Zap,
-    title: "AI Outreach Engine",
+    title: "AI outreach engine",
     description:
       "Generate personalized cold emails, warm intro requests, and LinkedIn messages with customizable tone and goals.",
   },
   {
     icon: Shield,
-    title: "Enterprise Security",
+    title: "Enterprise security",
     description:
       "Row-level security, encrypted OAuth tokens, audit logs, and workspace isolation keep your data safe.",
   },
   {
     icon: Users,
-    title: "Team Collaboration",
+    title: "Team collaboration",
     description:
       "Shared workspaces with role-based access. Owners, admins, members, and viewers collaborate on relationship intelligence.",
   },
   {
     icon: BarChart3,
-    title: "Analytics Dashboard",
+    title: "Analytics dashboard",
     description:
       "Track searches, engagement, workspace growth, and AI usage. Understand how your team leverages their network.",
   },

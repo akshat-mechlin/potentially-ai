@@ -26,12 +26,18 @@ function toWorkspace(summary: WorkspaceSummary): Workspace {
 export function useWorkspaces() {
   const mounted = useIsClient();
   const queryClient = useQueryClient();
-  const { currentWorkspace, workspaces, setCurrentWorkspace, setWorkspaces } = useWorkspaceStore();
+  const {
+    currentWorkspace,
+    workspaces,
+    setCurrentWorkspace,
+    setWorkspaces,
+    removeWorkspace,
+  } = useWorkspaceStore();
 
-  const { data, isLoading, refetch } = useQuery<WorkspacesResponse>({
+  const { data, isLoading, refetch, isFetched } = useQuery<WorkspacesResponse>({
     queryKey: ["workspaces"],
     queryFn: async () => {
-      const res = await fetch("/api/workspaces");
+      const res = await fetch("/api/workspaces", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load workspaces");
       return res.json();
     },
@@ -47,10 +53,15 @@ export function useWorkspaces() {
       return;
     }
 
-    const list = data?.workspaces ?? [];
-    if (!list.length) return;
+    if (!isFetched) return;
 
+    const list = data?.workspaces ?? [];
     setWorkspaces(list.map(toWorkspace));
+
+    if (!list.length) {
+      setCurrentWorkspace(null);
+      return;
+    }
 
     const persisted = currentWorkspace
       ? list.find((workspace) => workspace.id === currentWorkspace.id)
@@ -64,7 +75,13 @@ export function useWorkspaces() {
     }
 
     setCurrentWorkspace(toWorkspace(list[0]));
-  }, [data?.workspaces, currentWorkspace, setCurrentWorkspace, setWorkspaces]);
+  }, [
+    currentWorkspace,
+    data?.workspaces,
+    isFetched,
+    setCurrentWorkspace,
+    setWorkspaces,
+  ]);
 
   const switchWorkspace = useCallback(
     (workspace: WorkspaceSummary | Workspace) => {
@@ -82,13 +99,22 @@ export function useWorkspaces() {
     queryClient.invalidateQueries({ queryKey: ["workspace-dashboard"] });
   }, [queryClient, refetch]);
 
+  const evictWorkspace = useCallback(
+    (workspaceId: string) => {
+      removeWorkspace(workspaceId);
+      queryClient.setQueryData<WorkspacesResponse>(["workspaces"], (current) => ({
+        workspaces: (current?.workspaces ?? []).filter((workspace) => workspace.id !== workspaceId),
+      }));
+      queryClient.removeQueries({ queryKey: ["workspace-detail", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["workspace-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["connectors"] });
+    },
+    [queryClient, removeWorkspace],
+  );
+
   const summaries = isDemoMode()
     ? [{ ...DEMO_WORKSPACE, role: "owner" as const, member_count: 3 }]
-    : (data?.workspaces ?? workspaces.map((workspace) => ({
-        ...workspace,
-        role: "owner" as const,
-        member_count: 1,
-      })));
+    : (data?.workspaces ?? []);
 
   return {
     workspaces: summaries,
@@ -96,5 +122,6 @@ export function useWorkspaces() {
     isLoading: !mounted || isLoading,
     switchWorkspace,
     refreshWorkspaces,
+    evictWorkspace,
   };
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isDataDemoMode } from "@/lib/app-config";
 import { listAuditEvents } from "@/lib/data/audit";
 
 export async function GET(request: Request) {
@@ -22,6 +23,13 @@ const simulateSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (!isDataDemoMode()) {
+    return NextResponse.json(
+      { error: "Simulated replies are only available in demo mode" },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = simulateSchema.parse(await request.json());
     const { handleInboundReply } = await import("@/lib/data/playbook-replies");

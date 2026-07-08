@@ -37,6 +37,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth`);
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.email) {
+    try {
+      const { linkConversationThreadsForEmail } = await import("@/lib/data/platform-users");
+      await linkConversationThreadsForEmail(user.id, user.email);
+    } catch (linkError) {
+      console.warn("Chat thread linking on auth failed:", linkError);
+    }
+  }
+
   if (connectorKey) {
     const def = getConnectorDefinition(connectorKey);
     try {

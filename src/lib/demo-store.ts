@@ -156,6 +156,14 @@ export function createDemoWorkspace(name: string): Workspace {
   return workspace;
 }
 
+export function deleteDemoWorkspace(workspaceId: string) {
+  workspaces = workspaces.filter((workspace) => workspace.id !== workspaceId);
+}
+
+export function getDemoWorkspaceById(workspaceId: string) {
+  return workspaces.find((workspace) => workspace.id === workspaceId);
+}
+
 export function getDemoIntroductions() {
   return introductions;
 }

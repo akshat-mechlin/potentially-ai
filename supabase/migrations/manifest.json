@@ -94,5 +94,53 @@
     "name": "playbook_sequences_polish",
     "file": "20260628120000_playbook_sequences_polish.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260629120000",
+    "name": "workspace_email_settings",
+    "file": "20260629120000_workspace_email_settings.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260629140000",
+    "name": "email_personal_and_domain_verification",
+    "file": "20260629140000_email_personal_and_domain_verification.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260629160000",
+    "name": "workspace_leave_and_delete",
+    "file": "20260629160000_workspace_leave_and_delete.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260707140000",
+    "name": "platform_chat_delivery",
+    "file": "20260707140000_platform_chat_delivery.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260707180000",
+    "name": "playbook_sequences_cron",
+    "file": "20260707180000_playbook_sequences_cron.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260707190000",
+    "name": "thread_messages_realtime",
+    "file": "20260707190000_thread_messages_realtime.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260708120000",
+    "name": "sequence_allowed_weekdays",
+    "file": "20260708120000_sequence_allowed_weekdays.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260708140000",
+    "name": "conversation_threads_per_contact",
+    "file": "20260708140000_conversation_threads_per_contact.sql",
+    "remote": "applied"
   }
 ]

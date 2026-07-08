@@ -39,9 +39,28 @@ export function addBusinessDays(days: number, from = new Date()) {
   return result;
 }
 
-export function computeNextActionAt(delayDays: number, sendConfig: SendConfig) {
+export function nextAllowedWeekday(from: Date, allowedWeekdays: number[]) {
+  const allowed = allowedWeekdays.length
+    ? [...new Set(allowedWeekdays.filter((d) => d >= 0 && d <= 6))]
+    : [1, 2, 3, 4, 5];
+  const result = new Date(from);
+  for (let i = 0; i < 14; i += 1) {
+    if (allowed.includes(result.getDay())) return result;
+    result.setDate(result.getDate() + 1);
+  }
+  return result;
+}
+
+export function computeNextActionAt(
+  delayDays: number,
+  sendConfig: SendConfig,
+  allowedWeekdays?: number[] | null,
+) {
   const base = addBusinessDays(Math.max(0, delayDays));
-  if (sendConfig.skip_weekends) {
+  if (allowedWeekdays?.length) {
+    const onAllowedDay = nextAllowedWeekday(base, allowedWeekdays);
+    base.setTime(onAllowedDay.getTime());
+  } else if (sendConfig.skip_weekends) {
     while (isWeekend(base)) {
       base.setDate(base.getDate() + 1);
     }

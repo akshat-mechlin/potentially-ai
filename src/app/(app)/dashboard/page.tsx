@@ -34,8 +34,13 @@ export default function DashboardPage() {
   const recentContacts = (contactsData?.contacts ?? []).slice(0, 5);
   const recentSearches = (stats?.activity ?? [])
     .filter((item) => item.event.startsWith("AI search:"))
-    .slice(0, 3)
-    .map((item) => item.event.replace(/^AI search:\s*/, ""));
+    .reduce<Array<{ id: string; query: string }>>((acc, item) => {
+      const query = item.event.replace(/^AI search:\s*/, "");
+      if (acc.some((entry) => entry.query === query)) return acc;
+      acc.push({ id: item.id, query });
+      return acc;
+    }, [])
+    .slice(0, 3);
 
   if (isMobileApp) {
     return (
@@ -50,12 +55,12 @@ export default function DashboardPage() {
 
         <MobileListSection title="Recent searches">
           {recentSearches.length ? (
-            recentSearches.map((q) => (
+            recentSearches.map((entry) => (
               <MobileListTile
-                key={q}
-                href={`/search?q=${encodeURIComponent(q)}`}
+                key={entry.id}
+                href={`/search?q=${encodeURIComponent(entry.query)}`}
                 icon={Search}
-                title={q}
+                title={entry.query}
                 iconMuted
               />
             ))
@@ -123,7 +128,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Searches</CardTitle>
+            <CardTitle>Recent searches</CardTitle>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/search">
                 New search <ArrowRight className="ml-1 h-3 w-3" />
@@ -134,14 +139,14 @@ export default function DashboardPage() {
             {recentSearches.length === 0 ? (
               <p className="text-sm text-muted-foreground">No searches yet.</p>
             ) : (
-              recentSearches.map((q) => (
+              recentSearches.map((entry) => (
                 <Link
-                  key={q}
-                  href={`/search?q=${encodeURIComponent(q)}`}
+                  key={entry.id}
+                  href={`/search?q=${encodeURIComponent(entry.query)}`}
                   className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:bg-secondary/30"
                 >
                   <Search className="h-4 w-4 text-primary" />
-                  <span className="text-sub">{q}</span>
+                  <span className="text-sub">{entry.query}</span>
                 </Link>
               ))
             )}
@@ -150,7 +155,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Contacts</CardTitle>
+            <CardTitle>Recent contacts</CardTitle>
             <Button variant="ghost" size="sm" asChild>
               <Link href="/contacts">
                 View all <ArrowRight className="ml-1 h-3 w-3" />
@@ -190,7 +195,7 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">Group Activity</CardTitle>
+          <CardTitle className="flex items-center gap-2">Group activity</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">

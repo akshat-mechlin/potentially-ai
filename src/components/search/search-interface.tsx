@@ -16,15 +16,20 @@ import { SearchResultCard } from "./search-result-card";
 
 interface SearchInterfaceProps {
   initialQuery?: string;
+  initialGroupId?: string;
 }
 
-export function SearchInterface({ initialQuery = "" }: SearchInterfaceProps) {
+export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInterfaceProps) {
   const { query, setQuery, results, isSearching, setIsSearching, setResults, addToHistory } =
     useSearchStore();
   const { workspaces } = useWorkspaces();
   const { isMobileApp } = useMobileApp();
   const [localQuery, setLocalQuery] = useState(query || initialQuery);
   const initialSearchRan = useRef(false);
+
+  const filteredGroup = initialGroupId
+    ? workspaces.find((workspace) => workspace.id === initialGroupId)
+    : null;
 
   const handleSearch = async (searchQuery?: string) => {
     const q = searchQuery || localQuery;
@@ -38,7 +43,10 @@ export function SearchInterface({ initialQuery = "" }: SearchInterfaceProps) {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({
+          query: q,
+          ...(initialGroupId ? { workspace_id: initialGroupId } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -76,11 +84,20 @@ export function SearchInterface({ initialQuery = "" }: SearchInterfaceProps) {
         <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           <Users className="h-4 w-4 shrink-0" />
           <span>
-            Searching across{" "}
-            <strong className="font-medium text-foreground">
-              {groupCount} {groupCount === 1 ? "group" : "groups"}
-            </strong>{" "}
-            — your connections plus every teammate&apos;s synced contacts
+            {filteredGroup ? (
+              <>
+                Searching in{" "}
+                <strong className="font-medium text-foreground">{filteredGroup.name}</strong> only
+              </>
+            ) : (
+              <>
+                Searching across{" "}
+                <strong className="font-medium text-foreground">
+                  {groupCount} {groupCount === 1 ? "group" : "groups"}
+                </strong>{" "}
+                — your connections plus every teammate&apos;s synced contacts
+              </>
+            )}
           </span>
         </div>
       )}

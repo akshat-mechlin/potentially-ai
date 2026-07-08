@@ -15,8 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function PlaybookShell({ children }: { children: React.ReactNode }) {
-  const { id } = useParams<{ id: string }>();
+export function PlaybookShell({
+  children,
+  playbookId: playbookIdProp,
+}: {
+  children: React.ReactNode;
+  playbookId?: string;
+}) {
+  const params = useParams<{ id: string }>();
+  const id = playbookIdProp ?? params.id;
   const pathname = usePathname();
   const { enabled: playbooksEnabled } = usePlaybookEnabled();
   const { isMobileApp } = useMobileApp();

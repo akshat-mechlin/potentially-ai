@@ -8,9 +8,14 @@ export function getMobileBackLink(pathname: string): MobileBackLink | null {
     return { href: `/playbooks/${prospectMatch[1]}/runs` };
   }
 
-  const runMatch = pathname.match(/^\/playbooks\/([^/]+)\/runs\/([^/]+)$/);
-  if (runMatch) {
-    return { href: `/playbooks/${runMatch[1]}/runs` };
+  const flatRunMatch = pathname.match(/^\/playbook-runs\/([^/]+)$/);
+  if (flatRunMatch) {
+    return { href: "/playbooks" };
+  }
+
+  const legacyRunMatch = pathname.match(/^\/playbooks\/([^/]+)\/runs\/([^/]+)$/);
+  if (legacyRunMatch) {
+    return { href: `/playbooks/${legacyRunMatch[1]}/runs` };
   }
 
   const playbookSubMatch = pathname.match(
@@ -40,6 +45,11 @@ export function getMobileBackLink(pathname: string): MobileBackLink | null {
     return { href: "/groups" };
   }
 
+  const chatMatch = pathname.match(/^\/chats\/([^/]+)$/);
+  if (chatMatch) {
+    return { href: "/chats" };
+  }
+
   return null;
 }
 
@@ -47,11 +57,13 @@ export function getMobileBackLink(pathname: string): MobileBackLink | null {
 export function isImmersiveMobileRoute(pathname: string): boolean {
   return (
     pathname.includes("/prospects/") ||
-    pathname.match(/^\/playbooks\/[^/]+\/runs\/[^/]+$/) !== null
+    pathname.match(/^\/playbook-runs\/[^/]+$/) !== null ||
+    pathname.match(/^\/playbooks\/[^/]+\/runs\/[^/]+$/) !== null ||
+    pathname.match(/^\/chats\/[^/]+$/) !== null
   );
 }
 
 /** Hide the global app bar — screen provides its own native header. */
 export function shouldHideAppHeader(pathname: string): boolean {
-  return pathname.includes("/prospects/");
+  return pathname.includes("/prospects/") || pathname.match(/^\/chats\/[^/]+$/) !== null;
 }

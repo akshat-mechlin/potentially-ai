@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -14,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { FieldHint } from "@/components/playbooks/field-hint";
 import { DesktopOnly } from "@/components/mobile/primitives";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
@@ -100,13 +100,16 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
         <CardTitle className="text-base">Ideal customer profile & send rules</CardTitle>
         <DesktopOnly>
           <CardDescription>
-            Contacts are scored against titles, keywords, relationship strength, and warm paths.
+            These rules decide who gets matched in Runs and how messages are sent.
           </CardDescription>
         </DesktopOnly>
       </CardHeader>
       <CardContent className={cn("space-y-4", isMobileApp && "px-4 pb-4")}>
         <div className="space-y-2">
-          <Label>Title includes (comma-separated)</Label>
+          <FieldHint
+            label="Title includes"
+            hint="Comma-separated job titles that boost match score (e.g. CTO, Founder). Contacts whose title matches these are ranked higher when you start a run."
+          />
           <Input
             value={icpTitles}
             onChange={(e) => setIcpTitles(e.target.value)}
@@ -114,30 +117,45 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Keywords (nice to have)</Label>
+          <FieldHint
+            label="Keywords (nice to have)"
+            hint="Optional industry or topic words. They add score when found on the contact, but missing them does not exclude someone."
+          />
           <Input
             value={icpKeywords}
             onChange={(e) => setIcpKeywords(e.target.value)}
             placeholder="fintech, saas, ai"
           />
         </div>
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <div>
-            <p className="text-sm font-medium">Dedupe across playbooks</p>
+        <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+          <div className="space-y-1">
+            <FieldHint
+              label="Dedupe across playbooks"
+              hint="When on, contacts already in another active playbook run are skipped so you do not message the same person twice."
+            />
             <p className="text-xs text-muted-foreground">Skip contacts already in active runs</p>
           </div>
           <Switch checked={dedupeEnabled} onCheckedChange={setDedupeEnabled} />
         </div>
         <div className="space-y-2">
-          <Label>Cooldown days</Label>
+          <FieldHint
+            label="Cooldown days"
+            hint="Minimum days after contacting someone before they can be selected again in a new run. Prevents over-messaging the same contact."
+          />
           <Input value={cooldownDays} onChange={(e) => setCooldownDays(e.target.value)} type="number" />
         </div>
         <div className="space-y-2">
-          <Label>Daily send cap</Label>
+          <FieldHint
+            label="Daily send cap"
+            hint="Maximum emails this playbook can send per day. Leave blank for no extra cap beyond your account/email limits."
+          />
           <Input value={dailyCap} onChange={(e) => setDailyCap(e.target.value)} placeholder="e.g. 50" />
         </div>
         <div className="space-y-2">
-          <Label>Calendly URL</Label>
+          <FieldHint
+            label="Calendly URL"
+            hint="Your Calendly scheduling link. Outbound emails include a tracked booking link automatically. When someone books (embed or Calendly webhook), the prospect is marked booked and follow-ups stop — no manual step."
+          />
           <Input
             value={calendlyUrl}
             onChange={(e) => setCalendlyUrl(e.target.value)}
@@ -145,7 +163,10 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
           />
         </div>
         <div className="space-y-2">
-          <Label>Automation level</Label>
+          <FieldHint
+            label="Automation level"
+            hint="Assist: you approve every send. Supervised: drafts are queued for review. Autonomous: after drafts are generated, emails send without manual approval."
+          />
           <Select value={automationLevel} onValueChange={(v) => setAutomationLevel(v as Playbook["automation_level"])}>
             <SelectTrigger>
               <SelectValue />
@@ -158,7 +179,10 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Email template</Label>
+          <FieldHint
+            label="Email template"
+            hint="Template used when generating drafts for this playbook. “AI-generated” writes from the playbook goal instead of a fixed template."
+          />
           <Select value={templateId} onValueChange={setTemplateId}>
             <SelectTrigger>
               <SelectValue placeholder="AI-generated (default)" />

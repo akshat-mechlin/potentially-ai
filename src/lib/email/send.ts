@@ -1,14 +1,13 @@
 import { Resend } from "resend";
+import { getPlatformFromAddress } from "@/lib/email/from-address";
 
 export interface SendEmailParams {
   to: string;
   subject: string;
   html: string;
   headers?: Record<string, string>;
-}
-
-function getFromAddress() {
-  return process.env.EMAIL_FROM || "Potentially <onboarding@resend.dev>";
+  from?: string;
+  replyTo?: string;
 }
 
 export function isEmailConfigured() {
@@ -19,10 +18,17 @@ function formatResendError(message: string) {
   if (message.includes("only send testing emails to your own email")) {
     return "Resend test mode only allows sending to your Resend account email. Sign up with that address for testing, or verify a domain at resend.com/domains and update EMAIL_FROM.";
   }
+  if (
+    message.includes("domain is not verified") ||
+    message.includes("not verified") ||
+    message.includes("verify your domain")
+  ) {
+    return "Your send domain is not verified yet. Open Settings → Email, complete DNS verification, or switch to Potentially email.";
+  }
   return message;
 }
 
-export async function sendEmail({ to, subject, html, headers }: SendEmailParams) {
+export async function sendEmail({ to, subject, html, headers, from, replyTo }: SendEmailParams) {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey || apiKey.startsWith("re_your")) {
@@ -36,11 +42,12 @@ export async function sendEmail({ to, subject, html, headers }: SendEmailParams)
 
   const resend = new Resend(apiKey);
   const { data, error } = await resend.emails.send({
-    from: getFromAddress(),
+    from: from ?? getPlatformFromAddress(),
     to: [to],
     subject,
     html,
     headers,
+    replyTo,
   });
 
   if (error) {

@@ -17,8 +17,8 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const commands = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "AI Search", href: "/search", icon: Search },
-  { label: "Network Graph", href: "/network", icon: Network },
+  { label: "Search", href: "/search", icon: Search },
+  { label: "Network", href: "/network", icon: Network },
   { label: "Contacts", href: "/contacts", icon: Users },
   { label: "Introductions", href: "/intros", icon: Handshake },
   { label: "Settings", href: "/settings", icon: Settings },
@@ -79,7 +79,7 @@ export function CommandMenu() {
           />
           <Command.List className="max-h-[300px] overflow-y-auto p-2">
             {query.trim() && (
-              <Command.Group heading="AI Search">
+              <Command.Group heading="Search">
                 <Command.Item
                   value={`search-${query}`}
                   onSelect={() => runSearch(query)}

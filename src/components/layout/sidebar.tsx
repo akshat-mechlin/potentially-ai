@@ -9,7 +9,6 @@ import { agentModeNav, isAgentModePath, navItems } from "@/lib/nav-items";
 import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
 import { useUIStore } from "@/stores";
 import { BrandLogo } from "@/components/brand-logo";
-import { GroupSwitcher } from "./workspace-switcher";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -31,12 +30,6 @@ export function Sidebar() {
       <div className="app-sidebar-brand flex h-14 items-center border-b border-border px-4">
         <BrandLogo href="/dashboard" size="sm" showText={sidebarOpen} />
       </div>
-
-      {sidebarOpen && (
-        <div className="border-b border-border p-3">
-          <GroupSwitcher />
-        </div>
-      )}
 
       <ScrollArea className="flex-1 py-3">
         <nav className="flex flex-col gap-1 px-2">

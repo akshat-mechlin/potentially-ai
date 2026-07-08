@@ -8,32 +8,32 @@ export interface FeatureFlagDefinition {
 export const FEATURE_FLAG_CATALOG: Record<string, FeatureFlagDefinition> = {
   ai_search: {
     key: "ai_search",
-    label: "AI Search",
+    label: "AI search",
     description: "AI-powered natural language search across your network",
   },
   graph_view: {
     key: "graph_view",
-    label: "Network Graph",
+    label: "Network graph",
     description: "Interactive relationship graph visualization",
   },
   outreach_engine: {
     key: "outreach_engine",
-    label: "Outreach Engine",
+    label: "Outreach engine",
     description: "AI-generated emails, LinkedIn messages, and intro requests",
   },
   team_collaboration: {
     key: "team_collaboration",
-    label: "Team Collaboration",
+    label: "Team collaboration",
     description: "Group invites, shared workspaces, and member roles",
   },
   beta_connectors: {
     key: "beta_connectors",
-    label: "Beta Connectors",
+    label: "Beta connectors",
     description: "Early-access connector integrations (Google, Outlook, etc.)",
   },
   billing_enforcement: {
     key: "billing_enforcement",
-    label: "Billing Enforcement",
+    label: "Billing enforcement",
     description: "Enforce plan limits on search, imports, and usage",
   },
   playbook_mode: {
@@ -43,7 +43,7 @@ export const FEATURE_FLAG_CATALOG: Record<string, FeatureFlagDefinition> = {
   },
   platform_chat: {
     key: "platform_chat",
-    label: "Platform Chat",
+    label: "Platform chat",
     description: "Realtime conversation UI on prospect detail pages",
   },
 };
@@ -53,7 +53,7 @@ export function formatFeatureFlagLabel(key: string): string {
     FEATURE_FLAG_CATALOG[key]?.label ??
     key
       .split("_")
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .map((part, index) => (index === 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part))
       .join(" ")
   );
 }

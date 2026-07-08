@@ -25,9 +25,20 @@ export async function listSequenceSteps(playbookId: string): Promise<SequenceSte
   return (data ?? []) as SequenceStep[];
 }
 
+function normalizeAllowedWeekdays(values?: number[] | null) {
+  if (!values?.length) return [1, 2, 3, 4, 5];
+  return [...new Set(values.filter((day) => day >= 0 && day <= 6))].sort((a, b) => a - b);
+}
+
 export async function saveSequenceSteps(
   playbookId: string,
-  steps: Array<{ delay_days: number; tone?: string; goal_override?: string; subject_hint?: string }>,
+  steps: Array<{
+    delay_days: number;
+    tone?: string;
+    goal_override?: string;
+    subject_hint?: string;
+    allowed_weekdays?: number[];
+  }>,
 ) {
   if (isDataDemoMode()) {
     const { updateDemoPlaybook } = await import("@/lib/demo-store/playbooks");
@@ -38,6 +49,7 @@ export async function saveSequenceSteps(
           playbook_id: playbookId,
           step_order: i,
           delay_days: step.delay_days,
+          allowed_weekdays: normalizeAllowedWeekdays(step.allowed_weekdays),
           tone: step.tone ?? "professional",
           goal_override: step.goal_override ?? null,
           subject_hint: step.subject_hint ?? null,
@@ -59,6 +71,7 @@ export async function saveSequenceSteps(
         playbook_id: playbookId,
         step_order: index,
         delay_days: step.delay_days,
+        allowed_weekdays: normalizeAllowedWeekdays(step.allowed_weekdays),
         tone: step.tone ?? "professional",
         goal_override: step.goal_override ?? null,
         subject_hint: step.subject_hint ?? null,
@@ -76,7 +89,11 @@ export async function scheduleFollowUpForProspect(
   const nextStep = steps[currentStep + 1];
   if (!nextStep) return null;
 
-  const nextAt = computeNextActionAt(nextStep.delay_days, playbook.send_config);
+  const nextAt = computeNextActionAt(
+    nextStep.delay_days,
+    playbook.send_config,
+    nextStep.allowed_weekdays,
+  );
 
   if (isDataDemoMode()) {
     const { updateDemoProspect } = await import("@/lib/demo-store/playbooks");
@@ -141,6 +158,18 @@ export async function processDueSequenceFollowUps() {
     const steps = await listSequenceStepsAdmin(playbook.id);
     const step = steps[(row.current_sequence_step as number) ?? 0];
     if (!step) continue;
+
+    const allowed = step.allowed_weekdays?.length ? step.allowed_weekdays : [1, 2, 3, 4, 5];
+    if (!allowed.includes(new Date().getDay())) {
+      const { computeNextActionAt } = await import("@/lib/playbooks/send-utils");
+      await supabase
+        .from("playbook_run_contacts")
+        .update({
+          next_action_at: computeNextActionAt(0, playbook.send_config, allowed),
+        })
+        .eq("id", row.id);
+      continue;
+    }
 
     const { data: contact } = await supabase
       .from("contacts")

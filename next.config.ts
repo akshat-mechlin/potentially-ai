@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/playbooks/:playbookId/runs/:runId",
+        destination: "/playbook-runs/:runId",
+      },
+    ];
+  },
   headers: async () => [
     {
       source: "/sw.js",

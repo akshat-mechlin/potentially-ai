@@ -163,6 +163,8 @@ export interface SequenceStep {
   playbook_id: string;
   step_order: number;
   delay_days: number;
+  /** Days of week (0=Sunday … 6=Saturday) when this step may fire. */
+  allowed_weekdays: number[];
   tone: string;
   goal_override: string | null;
   subject_hint: string | null;

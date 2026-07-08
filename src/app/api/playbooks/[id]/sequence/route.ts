@@ -9,6 +9,7 @@ const schema = z.object({
       tone: z.string().optional(),
       goal_override: z.string().optional(),
       subject_hint: z.string().optional(),
+      allowed_weekdays: z.array(z.number().int().min(0).max(6)).min(1).optional(),
     }),
   ),
 });
