@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -44,7 +44,7 @@ function formatRole(role: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-export default function GroupsPage() {
+function GroupsPageContent() {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
   const router = useRouter();
@@ -321,5 +321,13 @@ export default function GroupsPage() {
         workspaceName={inviteWorkspace?.name}
       />
     </div>
+  );
+}
+
+export default function GroupsPage() {
+  return (
+    <Suspense fallback={null}>
+      <GroupsPageContent />
+    </Suspense>
   );
 }
