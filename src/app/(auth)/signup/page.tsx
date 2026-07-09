@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthShell } from "@/components/layout/auth-shell";
+import { AuthForm } from "@/components/auth/auth-form";
 import { toast } from "sonner";
 
 const signupSchema = z
@@ -84,7 +85,7 @@ function SignupFormContent() {
         <CardDescription>Start building your relationship intelligence</CardDescription>
       </CardHeader>
       <CardContent className="p-0 pt-6">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full name</Label>
               <Input id="name" placeholder="Alex Morgan" {...register("name")} />
@@ -113,7 +114,7 @@ function SignupFormContent() {
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create account
             </Button>
-          </form>
+          </AuthForm>
 
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}

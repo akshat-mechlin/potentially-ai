@@ -12,6 +12,16 @@ function redirectWithAuthCookies(url: URL, supabaseResponse: NextResponse) {
 }
 
 export async function updateSession(request: NextRequest) {
+  if (
+    request.nextUrl.searchParams.has("password") ||
+    request.nextUrl.searchParams.has("confirmPassword")
+  ) {
+    const url = request.nextUrl.clone();
+    url.searchParams.delete("password");
+    url.searchParams.delete("confirmPassword");
+    return NextResponse.redirect(url);
+  }
+
   if (isDemoMode()) {
     return NextResponse.next({ request });
   }

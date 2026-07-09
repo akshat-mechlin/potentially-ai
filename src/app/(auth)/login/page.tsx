@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthShell } from "@/components/layout/auth-shell";
+import { AuthForm } from "@/components/auth/auth-form";
 import { toast } from "sonner";
 
 const loginSchema = z.object({
@@ -166,7 +167,7 @@ function LoginFormContent() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" placeholder="you@company.com" {...register("email")} />
@@ -190,7 +191,7 @@ function LoginFormContent() {
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Sign in
           </Button>
-        </form>
+        </AuthForm>
 
         <Button
           variant="ghost"

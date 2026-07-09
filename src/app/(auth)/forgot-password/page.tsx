@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthShell } from "@/components/layout/auth-shell";
+import { AuthForm } from "@/components/auth/auth-form";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -55,7 +56,7 @@ export default function ForgotPasswordPage() {
       </CardHeader>
       {!sent && (
         <CardContent className="p-0 pt-6">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" {...register("email")} />
@@ -63,7 +64,7 @@ export default function ForgotPasswordPage() {
             <Button type="submit" className="w-full">
               Send reset link
             </Button>
-          </form>
+          </AuthForm>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             <Link href="/login" className="text-primary hover:underline">
               Back to login
