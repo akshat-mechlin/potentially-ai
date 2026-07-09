@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { passwordResetEmail } from "@/lib/email/templates";
-import { sendEmail } from "@/lib/email/send";
+import { deliverAuthEmail } from "@/lib/email/auth-delivery";
 import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
@@ -29,7 +29,16 @@ export async function POST(request: Request) {
     // Always return success to avoid email enumeration
     if (!error && data.properties?.action_link) {
       const template = passwordResetEmail(data.properties.action_link);
-      await sendEmail({ to: email, subject: template.subject, html: template.html });
+      const delivery = await deliverAuthEmail({
+        to: email,
+        subject: template.subject,
+        html: template.html,
+      });
+
+      if (!delivery.sent) {
+        console.warn("[forgot-password] Email not sent:", delivery.reason);
+        console.warn("[forgot-password] Reset link:", data.properties.action_link);
+      }
     }
 
     return NextResponse.json({

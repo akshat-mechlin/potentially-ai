@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { confirmUserEmail } from "@/lib/auth/confirm-user";
 import { signupVerificationEmail } from "@/lib/email/templates";
-import { sendEmail } from "@/lib/email/send";
+import { deliverAuthEmail } from "@/lib/email/auth-delivery";
 import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
@@ -52,15 +53,30 @@ export async function POST(request: Request) {
     }
 
     const template = signupVerificationEmail(name, actionLink);
-    const emailResult = await sendEmail({ to: email, subject: template.subject, html: template.html });
+    const delivery = await deliverAuthEmail({
+      to: email,
+      subject: template.subject,
+      html: template.html,
+    });
 
-    if (emailResult && "skipped" in emailResult && emailResult.skipped) {
-      console.warn("[signup] Verification link (email not sent):", actionLink);
+    if (!delivery.sent) {
+      if (!delivery.recoverable) {
+        return NextResponse.json({ error: delivery.reason }, { status: 500 });
+      }
+
+      const userId = data.user?.id;
+      if (userId) {
+        await confirmUserEmail(supabase, userId);
+      }
+
+      console.warn("[signup] Verification email not sent:", delivery.reason);
+      console.warn("[signup] Verification link:", actionLink);
+
       return NextResponse.json({
         success: true,
         emailSkipped: true,
         message:
-          "Account created, but no verification email was sent. Add RESEND_API_KEY to .env, or use the link logged in your dev server terminal.",
+          "Account created. Email delivery is limited on this server — you can sign in with your password now.",
       });
     }
 

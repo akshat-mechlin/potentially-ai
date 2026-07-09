@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { magicLinkEmail } from "@/lib/email/templates";
-import { sendEmail } from "@/lib/email/send";
+import { deliverAuthEmail } from "@/lib/email/auth-delivery";
 import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
@@ -39,7 +39,28 @@ export async function POST(request: Request) {
     }
 
     const template = magicLinkEmail(actionLink);
-    await sendEmail({ to: email, subject: template.subject, html: template.html });
+    const delivery = await deliverAuthEmail({
+      to: email,
+      subject: template.subject,
+      html: template.html,
+    });
+
+    if (!delivery.sent) {
+      if (!delivery.recoverable) {
+        return NextResponse.json({ error: delivery.reason }, { status: 500 });
+      }
+
+      console.warn("[magic-link] Email not sent:", delivery.reason);
+      console.warn("[magic-link] Sign-in link:", actionLink);
+
+      return NextResponse.json(
+        {
+          error:
+            "Email delivery is limited on this server. Use email and password sign-in, or verify your domain in Resend.",
+        },
+        { status: 503 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
