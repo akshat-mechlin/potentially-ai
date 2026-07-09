@@ -42,6 +42,10 @@ export default function ResetPasswordPage() {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => {
       setReady(!!data.session);
+      if (data.session && window.location.hash) {
+        const clean = `${window.location.pathname}${window.location.search}`;
+        window.history.replaceState(null, "", clean);
+      }
     });
   }, []);
 

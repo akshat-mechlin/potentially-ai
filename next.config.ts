@@ -22,7 +22,38 @@ const nextConfig: NextConfig = {
   headers: async () => [
     {
       source: "/api/auth/:path*",
-      headers: [{ key: "Cache-Control", value: "no-store, must-revalidate" }],
+      headers: [
+        { key: "Cache-Control", value: "no-store, must-revalidate" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
+    },
+    {
+      source: "/login",
+      headers: [
+        { key: "Cache-Control", value: "no-store, must-revalidate" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
+    },
+    {
+      source: "/signup",
+      headers: [
+        { key: "Cache-Control", value: "no-store, must-revalidate" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
+    },
+    {
+      source: "/forgot-password",
+      headers: [
+        { key: "Cache-Control", value: "no-store, must-revalidate" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
+    },
+    {
+      source: "/reset-password",
+      headers: [
+        { key: "Cache-Control", value: "no-store, must-revalidate" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ],
     },
     {
       source: "/sw.js",

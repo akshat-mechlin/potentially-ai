@@ -143,7 +143,7 @@ export default function GroupsPage() {
         <DialogHeader>
           <DialogTitle>Create group</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onCreateGroup)} className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
+        <form method="post" action="" onSubmit={handleSubmit(onCreateGroup)} className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
           <div className="space-y-2">
             <Label>Group name</Label>
             <Input placeholder="Acme Ventures" {...register("name")} />
