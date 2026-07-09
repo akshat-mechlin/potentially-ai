@@ -3,6 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isDemoMode } from "@/lib/app-config";
 import { safeGetUser } from "@/lib/supabase/auth";
 
+function redirectWithAuthCookies(url: URL, supabaseResponse: NextResponse) {
+  const redirect = NextResponse.redirect(url);
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    redirect.cookies.set(cookie);
+  });
+  return redirect;
+}
+
 export async function updateSession(request: NextRequest) {
   if (isDemoMode()) {
     return NextResponse.next({ request });
@@ -56,7 +64,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", request.nextUrl.pathname);
-    return NextResponse.redirect(url);
+    return redirectWithAuthCookies(url, supabaseResponse);
   }
 
   const authPaths = ["/login", "/signup"];
@@ -65,7 +73,7 @@ export async function updateSession(request: NextRequest) {
   if (isAuthPath && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    return redirectWithAuthCookies(url, supabaseResponse);
   }
 
   return supabaseResponse;

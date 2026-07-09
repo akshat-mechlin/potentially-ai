@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -37,7 +37,14 @@ async function joinGroupFromInvite(invite: string) {
 function LoginFormContent() {
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
+  const authError = searchParams.get("error");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (authError === "auth") {
+      toast.error("Sign-in failed. Check your credentials or try again.");
+    }
+  }, [authError]);
 
   const {
     register,
@@ -70,13 +77,18 @@ function LoginFormContent() {
         return;
       }
 
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          ...(invite ? { invite } : {}),
+        }),
       });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Login failed");
 
-      if (error) throw error;
       await finishLogin();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Login failed");

@@ -1,5 +1,12 @@
-const CACHE_NAME = "potentially-v2";
+const CACHE_NAME = "potentially-v3";
 const PRECACHE = ["/icon.svg", "/icon-maskable.svg"];
+const NEVER_CACHE_PREFIXES = ["/api/", "/login", "/signup", "/dashboard", "/forgot-password", "/reset-password"];
+
+function shouldNeverCache(pathname: string): boolean {
+  return NEVER_CACHE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(prefix),
+  );
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -22,6 +29,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (shouldNeverCache(url.pathname)) return;
 
   // Never cache Next.js build assets; stale chunks cause hydration failures after deploys.
   if (url.pathname.startsWith("/_next/")) return;
