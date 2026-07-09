@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { confirmUserEmail } from "@/lib/auth/confirm-user";
 import { signupVerificationEmail } from "@/lib/email/templates";
 import { deliverAuthEmail } from "@/lib/email/auth-delivery";
 import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
@@ -60,24 +59,15 @@ export async function POST(request: Request) {
     });
 
     if (!delivery.sent) {
-      if (!delivery.recoverable) {
-        return NextResponse.json({ error: delivery.reason }, { status: 500 });
-      }
-
       const userId = data.user?.id;
       if (userId) {
-        await confirmUserEmail(supabase, userId);
+        await supabase.auth.admin.deleteUser(userId).catch((deleteError) => {
+          console.error("Failed to roll back unverified signup user:", deleteError);
+        });
       }
 
-      console.warn("[signup] Verification email not sent:", delivery.reason);
-      console.warn("[signup] Verification link:", actionLink);
-
-      return NextResponse.json({
-        success: true,
-        emailSkipped: true,
-        message:
-          "Account created. Email delivery is limited on this server — you can sign in with your password now.",
-      });
+      console.error("[signup] Verification email not sent:", delivery.reason);
+      return NextResponse.json({ error: delivery.reason }, { status: 503 });
     }
 
     return NextResponse.json({
