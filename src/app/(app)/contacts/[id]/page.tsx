@@ -74,8 +74,8 @@ function ContactDetailContent({
   });
 
   const { data: allContacts } = useQuery<{ contacts: Contact[] }>({
-    queryKey: ["contacts"],
-    queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+    queryKey: ["contacts", "mutual", id],
+    queryFn: () => fetch("/api/contacts?limit=4").then((r) => r.json()),
   });
 
   const { data: summary } = useQuery({

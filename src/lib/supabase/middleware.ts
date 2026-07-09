@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isDemoMode } from "@/lib/app-config";
-import { safeGetUser } from "@/lib/supabase/auth";
+import { safeGetSessionUser } from "@/lib/supabase/auth";
 
 function redirectWithAuthCookies(url: URL, supabaseResponse: NextResponse) {
   const redirect = NextResponse.redirect(url);
@@ -47,7 +47,7 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { user, networkError } = await safeGetUser(supabase);
+  const { user, networkError } = await safeGetSessionUser(supabase);
 
   const protectedPaths = [
     "/dashboard",

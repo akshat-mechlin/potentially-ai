@@ -1,27 +1,24 @@
-import type { User } from "@supabase/supabase-js";
 import { isDataDemoMode } from "@/lib/app-config";
 import { DEMO_PROFILE } from "@/lib/demo-data";
 import type { Profile } from "@/types";
 import { getUserWorkspaceContext } from "./workspace";
 
-function nameFromAuthUser(user: User): string | null {
-  const meta = user.user_metadata ?? {};
-  const name =
-    (typeof meta.full_name === "string" && meta.full_name) ||
-    (typeof meta.name === "string" && meta.name) ||
-    user.email?.split("@")[0] ||
-    null;
-  return name;
+type ContextUser = {
+  id: string;
+  email: string;
+};
+
+function nameFromContextUser(user: ContextUser): string | null {
+  return user.email?.split("@")[0] || null;
 }
 
-function profileFromAuthUser(user: User): Profile {
+function profileFromContextUser(user: ContextUser): Profile {
   const now = new Date().toISOString();
   return {
     id: user.id,
     email: user.email ?? "",
-    name: nameFromAuthUser(user),
-    avatar_url:
-      typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null,
+    name: nameFromContextUser(user),
+    avatar_url: null,
     bio: null,
     title: null,
     linkedin_url: null,
@@ -31,15 +28,12 @@ function profileFromAuthUser(user: User): Profile {
   };
 }
 
-function mergeProfileWithAuth(row: Profile | null, user: User): Profile {
-  const base = row ?? profileFromAuthUser(user);
+function mergeProfileWithContext(row: Profile | null, user: ContextUser): Profile {
+  const base = row ?? profileFromContextUser(user);
   return {
     ...base,
     email: base.email || user.email || "",
-    name: base.name || nameFromAuthUser(user),
-    avatar_url:
-      base.avatar_url ||
-      (typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : null),
+    name: base.name || nameFromContextUser(user),
   };
 }
 
@@ -56,7 +50,7 @@ export async function getProfile(): Promise<Profile | null> {
     .maybeSingle();
 
   if (error) throw error;
-  return mergeProfileWithAuth(data as Profile | null, user);
+  return mergeProfileWithContext(data as Profile | null, user);
 }
 
 export async function updateProfile(updates: {
@@ -75,7 +69,7 @@ export async function updateProfile(updates: {
   const payload = {
     id: user.id,
     email: existing?.email || user.email || "",
-    name: updates.name ?? existing?.name ?? nameFromAuthUser(user),
+    name: updates.name ?? existing?.name ?? nameFromContextUser(user),
     title: updates.title ?? existing?.title ?? null,
     bio: updates.bio ?? existing?.bio ?? null,
   };
@@ -87,5 +81,5 @@ export async function updateProfile(updates: {
     .single();
 
   if (error) throw error;
-  return mergeProfileWithAuth(data as Profile, user);
+  return mergeProfileWithContext(data as Profile, user);
 }

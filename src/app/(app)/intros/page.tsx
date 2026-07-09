@@ -52,8 +52,8 @@ export default function IntrosPage() {
   });
 
   const { data: contactsData } = useQuery<{ contacts: Contact[] }>({
-    queryKey: ["contacts"],
-    queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+    queryKey: ["contacts", "picker"],
+    queryFn: () => fetch("/api/contacts?limit=500").then((r) => r.json()),
   });
 
   const handleRequest = async () => {

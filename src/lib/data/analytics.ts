@@ -1,7 +1,7 @@
 import { isDataDemoMode } from "@/lib/app-config";
 import type { AnalyticsData } from "@/types";
 import { getUserWorkspaceContext, listUserWorkspaces } from "./workspace";
-import { format, subDays, startOfMonth, subMonths } from "date-fns";
+import { subDays } from "date-fns";
 
 function demoAnalytics(): AnalyticsData {
   return {
@@ -49,33 +49,29 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 
   const weekAgo = subDays(new Date(), 7).toISOString();
 
-  const [
-    { data: searches },
-    { data: contacts },
-    { data: events },
-    { count: totalContacts },
-  ] = await Promise.all([
-    supabase
-      .from("search_history")
-      .select("created_at")
-      .eq("user_id", user.id)
-      .in("workspace_id", workspaceIds)
-      .gte("created_at", weekAgo),
-    supabase
-      .from("contacts")
-      .select("full_name, strength_score")
-      .in("workspace_id", workspaceIds)
-      .order("strength_score", { ascending: false })
-      .limit(5),
-    supabase
-      .from("relationship_events")
-      .select("type")
-      .in("workspace_id", workspaceIds),
-    supabase
-      .from("contacts")
-      .select("*", { count: "exact", head: true })
-      .in("workspace_id", workspaceIds),
-  ]);
+  const [{ data: searches }, { data: contacts }, { data: events }, { data: growthRows }] =
+    await Promise.all([
+      supabase
+        .from("search_history")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .in("workspace_id", workspaceIds)
+        .gte("created_at", weekAgo),
+      supabase
+        .from("contacts")
+        .select("full_name, strength_score")
+        .in("workspace_id", workspaceIds)
+        .order("strength_score", { ascending: false })
+        .limit(5),
+      supabase
+        .from("relationship_events")
+        .select("type")
+        .in("workspace_id", workspaceIds),
+      supabase.rpc("get_workspace_contact_growth", {
+        p_workspace_ids: workspaceIds,
+        p_months: 6,
+      }),
+    ]);
 
   const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const countsByDay = new Map<string, number>();
@@ -100,27 +96,6 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     engagementMap.set(label, (engagementMap.get(label) ?? 0) + 1);
   });
 
-  const growth: AnalyticsData["workspace_growth"] = [];
-  for (let i = 5; i >= 0; i--) {
-    const monthStart = startOfMonth(subMonths(new Date(), i));
-    const { count } = await supabase
-      .from("contacts")
-      .select("*", { count: "exact", head: true })
-      .in("workspace_id", workspaceIds)
-      .lte("created_at", monthStart.toISOString());
-
-    growth.push({
-      date: format(monthStart, "MMM"),
-      contacts: count ?? 0,
-    });
-  }
-  if (totalContacts !== null) {
-    growth[growth.length - 1] = {
-      date: format(new Date(), "MMM"),
-      contacts: totalContacts,
-    };
-  }
-
   return {
     searches_per_day: dayLabels.slice(1).concat(dayLabels[0]).map((date) => ({
       date,
@@ -130,7 +105,10 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       name: c.full_name,
       interactions: Math.round(c.strength_score ?? 0),
     })),
-    workspace_growth: growth,
+    workspace_growth: (growthRows ?? []).map((row: { month_label: string; contact_count: number }) => ({
+      date: row.month_label,
+      contacts: row.contact_count,
+    })),
     engagement: Array.from(engagementMap.entries()).map(([type, count]) => ({ type, count })),
   };
 }

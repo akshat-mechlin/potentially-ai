@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
+import { isDemoMode } from "@/lib/app-config";
 import { useIsClient } from "@/hooks/use-is-client";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,9 +26,43 @@ export function NotificationBell() {
   const { data: notificationData } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => fetch("/api/notifications").then((r) => r.json()),
-    refetchInterval: 60000,
     enabled: mounted,
+    staleTime: 30_000,
   });
+
+  useEffect(() => {
+    if (!mounted || isDemoMode()) return;
+
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
+    const supabase = createClient();
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      channel = supabase
+        .channel(`notifications:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          },
+        )
+        .subscribe();
+    });
+
+    return () => {
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
+    };
+  }, [mounted, queryClient]);
 
   const unread = notificationData?.unread ?? 0;
   const notifications = (notificationData?.notifications ?? []) as Notification[];

@@ -69,8 +69,82 @@ async function attachContactMetadata(
   }));
 }
 
-export async function listContacts(allGroups = true): Promise<Contact[]> {
-  if (isDataDemoMode()) return getDemoContacts();
+type ListContactsOptions = {
+  allGroups?: boolean;
+  limit?: number;
+  offset?: number;
+  q?: string;
+};
+
+function sanitizeSearchTerm(q: string) {
+  return q.trim().replace(/[%_,]/g, "");
+}
+
+function applyContactSearch<T extends { or: (filters: string) => T }>(query: T, q?: string) {
+  const term = q ? sanitizeSearchTerm(q) : "";
+  if (!term) return query;
+  const pattern = `%${term}%`;
+  return query.or(
+    `full_name.ilike.${pattern},email.ilike.${pattern},company_name.ilike.${pattern},title.ilike.${pattern}`,
+  );
+}
+
+export async function countContacts(
+  allGroupsOrOptions: boolean | Omit<ListContactsOptions, "limit" | "offset"> = true,
+): Promise<number> {
+  const options =
+    typeof allGroupsOrOptions === "boolean"
+      ? { allGroups: allGroupsOrOptions }
+      : allGroupsOrOptions;
+  const { allGroups = true, q } = options;
+
+  if (isDataDemoMode()) {
+    const contacts = getDemoContacts();
+    if (!q?.trim()) return contacts.length;
+    return filterContactsByQuery(q, contacts).length;
+  }
+
+  const { supabase, workspaceId: activeWorkspaceId } = await getUserWorkspaceContext();
+  if (!supabase) return 0;
+
+  const workspaceIds = allGroups
+    ? (await listUserWorkspaces(supabase)).map((workspace) => workspace.id)
+    : activeWorkspaceId
+      ? [activeWorkspaceId]
+      : [];
+
+  if (!workspaceIds.length) return 0;
+
+  let query = supabase
+    .from("contacts")
+    .select("*", { count: "exact", head: true })
+    .in("workspace_id", workspaceIds);
+
+  query = applyContactSearch(query, q);
+
+  const { count, error } = await query;
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function listContacts(
+  allGroupsOrOptions: boolean | ListContactsOptions = true,
+): Promise<Contact[]> {
+  const options =
+    typeof allGroupsOrOptions === "boolean"
+      ? { allGroups: allGroupsOrOptions }
+      : allGroupsOrOptions;
+  const { allGroups = true, limit, offset = 0, q } = options;
+
+  if (isDataDemoMode()) {
+    let contacts = getDemoContacts();
+    if (q?.trim()) {
+      contacts = filterContactsByQuery(q, contacts);
+    }
+    if (limit == null) return contacts;
+    return contacts.slice(offset, offset + limit);
+  }
 
   const { supabase, workspaceId: activeWorkspaceId } = await getUserWorkspaceContext();
   if (!supabase) return [];
@@ -83,12 +157,38 @@ export async function listContacts(allGroups = true): Promise<Contact[]> {
 
   if (!workspaceIds.length) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("contacts")
     .select("*")
     .in("workspace_id", workspaceIds)
     .order("created_at", { ascending: false });
 
+  query = applyContactSearch(query, q);
+
+  if (limit != null) {
+    query = query.range(offset, offset + limit - 1);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return (data ?? []) as Contact[];
+}
+
+export async function getContactsByIds(ids: string[]): Promise<Contact[]> {
+  const uniqueIds = [...new Set(ids)];
+  if (!uniqueIds.length) return [];
+
+  if (isDataDemoMode()) {
+    return uniqueIds
+      .map((id) => getDemoContactById(id))
+      .filter((contact): contact is Contact => Boolean(contact));
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase.from("contacts").select("*").in("id", uniqueIds);
   if (error) throw error;
   return (data ?? []) as Contact[];
 }

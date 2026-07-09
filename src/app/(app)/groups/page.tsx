@@ -58,7 +58,7 @@ export default function GroupsPage() {
 
   const { data: workspacesData, isLoading: workspacesLoading, refetch: refetchWorkspaces } = useQuery<{ workspaces: WorkspaceSummary[] }>({
     queryKey: ["workspaces"],
-    queryFn: () => fetch("/api/workspaces", { cache: "no-store" }).then((r) => r.json()),
+    queryFn: () => fetch("/api/workspaces").then((r) => r.json()),
     enabled: mounted,
   });
 

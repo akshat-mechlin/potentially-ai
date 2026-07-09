@@ -4,7 +4,7 @@ import { parseSearchIntent, rankAndExplain } from "@/lib/ai/openai";
 import { PlanLimitError, assertSearchAllowed } from "@/lib/billing/enforce";
 import { saveSearchHistory, searchContactsForQuery } from "@/lib/data/contacts";
 import { createClient } from "@/lib/supabase/server";
-import { safeGetUser } from "@/lib/supabase/auth";
+import { safeGetSessionUser } from "@/lib/supabase/auth";
 
 const searchSchema = z.object({
   query: z.string().min(1).max(500),
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const { query, workspace_id: workspaceId, filters } = searchSchema.parse(body);
 
     const supabase = await createClient();
-    const { user } = await safeGetUser(supabase);
+    const { user } = await safeGetSessionUser(supabase);
     if (user) {
       const { data: billingFlag } = await supabase
         .from("feature_flags")
@@ -31,15 +31,16 @@ export async function POST(request: Request) {
       }
     }
 
-    await parseSearchIntent(query);
-
     const ownerId =
       typeof filters?.owner_id === "string" ? filters.owner_id : undefined;
 
-    const contacts = await searchContactsForQuery(query, {
-      workspaceId,
-      ownerId,
-    });
+    const [, contacts] = await Promise.all([
+      parseSearchIntent(query),
+      searchContactsForQuery(query, {
+        workspaceId,
+        ownerId,
+      }),
+    ]);
     const ownerById = new Map(
       contacts.map((contact) => [contact.id, contact.network_owner_name ?? null]),
     );

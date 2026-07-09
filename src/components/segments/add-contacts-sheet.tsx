@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import {
   MOBILE_BOTTOM_SHEET,
   MobileEmpty,
 } from "@/components/mobile/primitives";
 import { MobileSearchBar } from "@/components/mobile/native-ui";
+import { flattenContactsPages, useContactsList } from "@/hooks/use-contacts-list";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getInitials } from "@/lib/utils";
-import type { Contact } from "@/types";
 import { toast } from "sonner";
 
 interface AddContactsSheetProps {
@@ -36,14 +35,21 @@ export function AddContactsSheet({
 }: AddContactsSheetProps) {
   const { isMobile } = useMobileApp();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [pickIds, setPickIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
-  const { data, isLoading } = useQuery<{ contacts: Contact[] }>({
-    queryKey: ["contacts"],
-    queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useContactsList({
+    q: debouncedSearch,
     enabled: open,
   });
+
+  const contacts = flattenContactsPages(data?.pages);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -56,17 +62,9 @@ export function AddContactsSheet({
   const excluded = useMemo(() => new Set(excludedIds), [excludedIds]);
 
   const availableContacts = useMemo(() => {
-    const list = (data?.contacts ?? []).filter((c) => !excluded.has(c.id));
-    if (!search.trim()) return list;
-    const q = search.toLowerCase();
-    return list.filter(
-      (c) =>
-        c.full_name.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.company_name?.toLowerCase().includes(q) ||
-        c.title?.toLowerCase().includes(q),
-    );
-  }, [data?.contacts, excluded, search]);
+    const list = contacts.filter((c) => !excluded.has(c.id));
+    return list;
+  }, [contacts, excluded]);
 
   const togglePick = (contactId: string) => {
     setPickIds((prev) =>
@@ -161,6 +159,18 @@ export function AddContactsSheet({
               })}
             </div>
           )}
+          {hasNextPage ? (
+            <div className="py-3 text-center">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? "Loading..." : "Load more"}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div className="border-t border-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

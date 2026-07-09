@@ -142,5 +142,23 @@
     "name": "conversation_threads_per_contact",
     "file": "20260708140000_conversation_threads_per_contact.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260709120000",
+    "name": "performance_package",
+    "file": "20260709120000_performance_package.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260710120000",
+    "name": "workspace_member_counts",
+    "file": "20260710120000_workspace_member_counts.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260710140000",
+    "name": "phase3_optimizations",
+    "file": "20260710140000_phase3_optimizations.sql",
+    "remote": "applied"
   }
 ]

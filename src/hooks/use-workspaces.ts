@@ -37,7 +37,7 @@ export function useWorkspaces() {
   const { data, isLoading, refetch, isFetched } = useQuery<WorkspacesResponse>({
     queryKey: ["workspaces"],
     queryFn: async () => {
-      const res = await fetch("/api/workspaces", { cache: "no-store" });
+      const res = await fetch("/api/workspaces");
       if (!res.ok) throw new Error("Failed to load workspaces");
       return res.json();
     },

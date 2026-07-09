@@ -1,5 +1,5 @@
 import { listAuditEvents } from "@/lib/data/audit";
-import { filterThreadMessagesForViewer, isSenderOnlyThreadMessage } from "@/lib/chat/thread-visibility";
+import { filterThreadMessagesForViewer } from "@/lib/chat/thread-visibility";
 import { getThreadForRunContact, getThreadMessages } from "@/lib/data/conversation-threads";
 import { isFeatureEnabled } from "@/lib/data/feature-flags";
 import { getProspectThreadMessages, getProspectThreadContext } from "@/lib/data/playbooks";
@@ -29,6 +29,35 @@ function shouldIncludeMessageInActivity(msg: ThreadMessage) {
 function previewMessage(body: string, max = 80) {
   const trimmed = body.replace(/\s+/g, " ").trim();
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+type ThreadInboxStat = {
+  thread_id: string;
+  message_count: number;
+  last_body: string | null;
+  last_created_at: string | null;
+};
+
+async function fetchThreadInboxStats(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  threadIds: string[],
+  excludeSenderOnly: boolean,
+) {
+  const stats = new Map<string, ThreadInboxStat>();
+  if (!threadIds.length) return stats;
+
+  const { data, error } = await supabase.rpc("get_thread_inbox_stats", {
+    p_thread_ids: threadIds,
+    p_exclude_sender_only: excludeSenderOnly,
+  });
+
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    stats.set(row.thread_id as string, row as ThreadInboxStat);
+  }
+
+  return stats;
 }
 
 type JoinedContact = {
@@ -193,29 +222,23 @@ export async function listWorkspaceChats(): Promise<ChatInboxItem[]> {
   const threadByContact = new Map(
     (threads ?? []).map((thread) => [thread.contact_id as string, thread]),
   );
-  const contactByThread = new Map(
-    (threads ?? []).map((thread) => [thread.id as string, thread.contact_id as string]),
-  );
 
   const lastMessageByContact = new Map<string, { body: string; created_at: string }>();
   const countByContact = new Map<string, number>();
 
   const threadIds = (threads ?? []).map((thread) => thread.id as string);
   if (threadIds.length) {
-    const { data: allMessages } = await supabase
-      .from("thread_messages")
-      .select("id, thread_id, body, created_at")
-      .in("thread_id", threadIds)
-      .order("created_at", { ascending: false });
+    const statsByThread = await fetchThreadInboxStats(supabase, threadIds, false);
 
-    for (const row of allMessages ?? []) {
-      const contactId = contactByThread.get(row.thread_id as string);
-      if (!contactId) continue;
-      countByContact.set(contactId, (countByContact.get(contactId) ?? 0) + 1);
-      if (!lastMessageByContact.has(contactId)) {
+    for (const thread of threads ?? []) {
+      const contactId = thread.contact_id as string;
+      const stat = statsByThread.get(thread.id as string);
+      if (!stat) continue;
+      countByContact.set(contactId, stat.message_count);
+      if (stat.last_body && stat.last_created_at) {
         lastMessageByContact.set(contactId, {
-          body: row.body as string,
-          created_at: row.created_at as string,
+          body: stat.last_body,
+          created_at: stat.last_created_at,
         });
       }
     }
@@ -295,22 +318,15 @@ export async function listReceivedChats(): Promise<ChatInboxItem[]> {
   const lastMessageByThread = new Map<string, { body: string; created_at: string }>();
   const countByThread = new Map<string, number>();
 
-  const { data: allMessages } = await supabase
-    .from("thread_messages")
-    .select("id, thread_id, body, created_at, message_type, metadata")
-    .in("thread_id", threadIds)
-    .order("created_at", { ascending: false });
-
-  for (const row of allMessages ?? []) {
-    const threadId = row.thread_id as string;
-    const msg = row as ThreadMessage;
-    if (isSenderOnlyThreadMessage(msg)) continue;
-
-    countByThread.set(threadId, (countByThread.get(threadId) ?? 0) + 1);
-    if (!lastMessageByThread.has(threadId)) {
-      lastMessageByThread.set(threadId, {
-        body: row.body as string,
-        created_at: row.created_at as string,
+  const statsByThread = await fetchThreadInboxStats(supabase, threadIds, true);
+  for (const thread of threads) {
+    const stat = statsByThread.get(thread.id as string);
+    if (!stat) continue;
+    countByThread.set(thread.id as string, stat.message_count);
+    if (stat.last_body && stat.last_created_at) {
+      lastMessageByThread.set(thread.id as string, {
+        body: stat.last_body,
+        created_at: stat.last_created_at,
       });
     }
   }

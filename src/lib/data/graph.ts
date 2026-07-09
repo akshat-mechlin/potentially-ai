@@ -6,6 +6,8 @@ import { findShortestPath, pathToNames } from "@/lib/graph-utils";
 
 export { findShortestPath, pathToNames };
 
+const GRAPH_CONTACT_LIMIT = 200;
+
 export async function getGraphData(): Promise<GraphData> {
   if (isDataDemoMode()) {
     return buildDemoGraph();
@@ -25,7 +27,9 @@ export async function getGraphData(): Promise<GraphData> {
     supabase
       .from("contacts")
       .select("id, full_name, strength_score, company_id")
-      .in("workspace_id", workspaceIds),
+      .in("workspace_id", workspaceIds)
+      .order("strength_score", { ascending: false })
+      .limit(GRAPH_CONTACT_LIMIT),
     supabase.from("companies").select("id, name").in("workspace_id", workspaceIds),
     supabase
       .from("relationship_events")

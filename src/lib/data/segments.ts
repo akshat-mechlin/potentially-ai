@@ -9,7 +9,7 @@ import {
   removeContactsFromDemoSegment,
   deleteDemoSegment,
 } from "@/lib/demo-store/playbooks";
-import { listContacts } from "@/lib/data/contacts";
+import { getContactsByIds } from "@/lib/data/contacts";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
 import type { Contact } from "@/types";
 import type { Segment } from "@/types/playbooks";
@@ -89,9 +89,7 @@ export async function getSegmentWithContacts(segmentId: string): Promise<{
   if (!segment) return null;
 
   const contactIds = await getSegmentContactIds(segmentId);
-  const allContacts = await listContacts();
-  const idSet = new Set(contactIds);
-  const contacts = allContacts.filter((c) => idSet.has(c.id));
+  const contacts = await getContactsByIds(contactIds);
 
   return { segment, contacts };
 }

@@ -10,7 +10,7 @@ import {
   getDemoRunProspects,
   updateDemoProspect,
 } from "@/lib/demo-store/playbooks";
-import { listContacts } from "@/lib/data/contacts";
+import { getContactsByIds, listContacts } from "@/lib/data/contacts";
 import { logAuditEvent } from "@/lib/data/audit";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
 import { scoreAllContactsForPlaybook } from "@/lib/playbooks/matching";
@@ -23,6 +23,9 @@ import type {
   PlaybookRun,
   SendConfig,
 } from "@/types/playbooks";
+import type { MatchResult } from "@/lib/playbooks/matching";
+
+const PLAYBOOK_CONTACT_BATCH = 500;
 import type { AutomationLevel, OutreachMode, PlaybookStatus } from "@/types/playbooks";
 
 const defaultIcp: IcpProfile = {
@@ -133,6 +136,37 @@ export async function updatePlaybook(
   return data as Playbook;
 }
 
+async function hydrateOwnerNames(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  contacts: Awaited<ReturnType<typeof listContacts>>,
+  ownerNames: Map<string, string | null>,
+) {
+  const ownerIds = [
+    ...new Set(
+      contacts
+        .map((contact) => contact.owner_id)
+        .filter(
+          (ownerId): ownerId is string =>
+            typeof ownerId === "string" && !ownerNames.has(ownerId),
+        ),
+    ),
+  ];
+
+  if (!ownerIds.length) return;
+
+  const { data: owners } = await supabase
+    .from("profiles")
+    .select("id, name, email")
+    .in("id", ownerIds);
+
+  for (const owner of owners ?? []) {
+    ownerNames.set(
+      owner.id as string,
+      (owner.name as string) || (owner.email as string) || null,
+    );
+  }
+}
+
 async function getActivePlaybookContactIds(supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>) {
   const { data: runs } = await supabase
     .from("playbook_runs")
@@ -241,35 +275,59 @@ export async function deployPlaybookRun(playbookId: string, options?: { segmentI
 
   if (runError) throw runError;
 
-  let contacts = await listContacts();
-  if (options?.segmentId) {
-    const { getSegmentContactIds } = await import("@/lib/data/segments");
-    const ids = new Set(await getSegmentContactIds(options.segmentId));
-    contacts = contacts.filter((c) => ids.has(c.id));
-  }
-
-  const ownerIds = [...new Set(contacts.map((c) => c.owner_id).filter(Boolean))] as string[];
-  const { data: owners } = ownerIds.length
-    ? await supabase.from("profiles").select("id, name, email").in("id", ownerIds)
-    : { data: [] };
-
-  const ownerNames = new Map(
-    (owners ?? []).map((o) => [o.id as string, (o.name as string) || (o.email as string) || null]),
-  );
-
   const activeContactIds = playbook.matching_config.dedupe_across_playbooks !== false
     ? await getActivePlaybookContactIds(supabase)
     : new Set<string>();
   const doNotContactIds = await getDoNotContactIds(supabase);
   const lastContactedAt = await getLastContactedMap(supabase);
+  const ownerNames = new Map<string, string | null>();
+  const scoringContext = {
+    ownerNames,
+    activeContactIds,
+    doNotContactIds,
+    lastContactedAt,
+    currentUserId: user.id,
+  };
 
-  const { matched, skipped } = scoreAllContactsForPlaybook(
-    contacts,
-    playbook.icp_profile,
-    playbook.matching_config,
-    playbook.outreach_mode,
-    { ownerNames, activeContactIds, doNotContactIds, lastContactedAt, currentUserId: user.id },
-  );
+  let matched: MatchResult[] = [];
+  let skipped: MatchResult[] = [];
+
+  if (options?.segmentId) {
+    const { getSegmentContactIds } = await import("@/lib/data/segments");
+    const ids = await getSegmentContactIds(options.segmentId);
+    const contacts = await getContactsByIds(ids);
+    await hydrateOwnerNames(supabase, contacts, ownerNames);
+    const result = scoreAllContactsForPlaybook(
+      contacts,
+      playbook.icp_profile,
+      playbook.matching_config,
+      playbook.outreach_mode,
+      scoringContext,
+    );
+    matched = result.matched;
+    skipped = result.skipped;
+  } else {
+    for (let offset = 0; ; offset += PLAYBOOK_CONTACT_BATCH) {
+      const batch = await listContacts({ limit: PLAYBOOK_CONTACT_BATCH, offset });
+      if (!batch.length) break;
+
+      await hydrateOwnerNames(supabase, batch, ownerNames);
+      const result = scoreAllContactsForPlaybook(
+        batch,
+        playbook.icp_profile,
+        playbook.matching_config,
+        playbook.outreach_mode,
+        scoringContext,
+      );
+      matched.push(...result.matched);
+      skipped.push(...result.skipped);
+
+      if (batch.length < PLAYBOOK_CONTACT_BATCH) break;
+    }
+
+    matched.sort((a, b) => b.score - a.score);
+    skipped.sort((a, b) => b.score - a.score);
+  }
 
   const rows = [
     ...matched.map((m) => ({

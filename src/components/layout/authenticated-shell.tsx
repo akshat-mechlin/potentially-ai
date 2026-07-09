@@ -1,14 +1,12 @@
 "use client";
 
-import type { Profile } from "@/types";
+import type { ReactNode } from "react";
 import { AppLayout } from "./app-layout";
+import { useProfile } from "@/hooks/use-profile";
 
-interface AuthenticatedShellProps {
-  children: React.ReactNode;
-  profile: Pick<Profile, "name" | "email" | "avatar_url"> | null;
-}
+export function AuthenticatedShell({ children }: { children: ReactNode }) {
+  const { data: profile } = useProfile();
 
-export function AuthenticatedShell({ children, profile }: AuthenticatedShellProps) {
   return (
     <AppLayout
       userName={profile?.name ?? profile?.email ?? undefined}

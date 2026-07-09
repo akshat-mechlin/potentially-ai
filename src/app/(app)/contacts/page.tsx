@@ -1,43 +1,46 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
-import { ContactCard } from "@/components/contacts/contact-card";
+import { ContactsInfiniteList } from "@/components/contacts/contacts-infinite-list";
 import { CsvImportButton } from "@/components/contacts/csv-import-button";
 import { SegmentSaveBar } from "@/components/segments/segment-save-bar";
 import { DesktopOnly, MobileListSection } from "@/components/mobile/primitives";
 import { MobileLargeTitle, MobileSearchBar } from "@/components/mobile/native-ui";
+import { flattenContactsPages, useContactsList } from "@/hooks/use-contacts-list";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { Contact } from "@/types";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
+  const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery<{ contacts: Contact[] }>({
-    queryKey: ["contacts"],
-    queryFn: () => fetch("/api/contacts").then((r) => r.json()),
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useContactsList({
+    q: debouncedSearch,
     enabled: mounted,
   });
 
-  const contacts = data?.contacts.filter((c) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      c.full_name.toLowerCase().includes(q) ||
-      c.email?.toLowerCase().includes(q) ||
-      c.company_name?.toLowerCase().includes(q) ||
-      c.title?.toLowerCase().includes(q)
-    );
-  });
+  const contacts = flattenContactsPages(data?.pages);
+  const total = data?.pages[0]?.total ?? contacts.length;
 
   const toggleContact = (contactId: string) => {
     setSelectedIds((prev) =>
@@ -45,18 +48,22 @@ export default function ContactsPage() {
     );
   };
 
+  const handleImportComplete = () => {
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+  };
+
   return (
     <div className={isMobileApp ? "space-y-4" : "space-y-6 pb-24"}>
       {isMobileApp && (
         <MobileLargeTitle
           title="Contacts"
-          subtitle={`${mounted ? (contacts?.length ?? 0) : 0} in your network`}
+          subtitle={`${mounted ? total : 0} in your network`}
         />
       )}
       <DesktopOnly>
         <div className="flex items-center justify-between gap-3">
           <p className="text-sub text-muted-foreground" suppressHydrationWarning>
-            {mounted ? (contacts?.length ?? 0) : 0} contacts across your groups
+            {mounted ? total : 0} contacts across your groups
           </p>
           <div className="flex gap-2">
             <Button
@@ -69,7 +76,7 @@ export default function ContactsPage() {
             >
               {selectMode ? "Done selecting" : "Select for segment"}
             </Button>
-            <CsvImportButton />
+            <CsvImportButton onImported={handleImportComplete} />
           </div>
         </div>
       </DesktopOnly>
@@ -87,7 +94,7 @@ export default function ContactsPage() {
           >
             {selectMode ? "Done" : "Select"}
           </Button>
-          <CsvImportButton />
+          <CsvImportButton onImported={handleImportComplete} />
         </div>
       )}
 
@@ -109,36 +116,34 @@ export default function ContactsPage() {
         </div>
       )}
 
-      {!mounted || isLoading ? (
-        <div className={isMobileApp ? "space-y-2" : "grid gap-4 sm:grid-cols-2"}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className={isMobileApp ? "h-16 rounded-xl" : "h-32"} />
-          ))}
-        </div>
-      ) : isMobileApp ? (
+      {isMobileApp ? (
         <MobileListSection>
-          {contacts?.map((contact) => (
-            <ContactCard
-              key={contact.id}
-              contact={contact}
-              selectable={selectMode}
-              selected={selectedIds.includes(contact.id)}
-              onToggle={toggleContact}
-            />
-          ))}
+          <ContactsInfiniteList
+            contacts={contacts}
+            total={total}
+            isLoading={!mounted || isLoading}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={!!hasNextPage}
+            onLoadMore={() => void fetchNextPage()}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggle={toggleContact}
+            layout="list"
+          />
         </MobileListSection>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {contacts?.map((contact) => (
-            <ContactCard
-              key={contact.id}
-              contact={contact}
-              selectable={selectMode}
-              selected={selectedIds.includes(contact.id)}
-              onToggle={toggleContact}
-            />
-          ))}
-        </div>
+        <ContactsInfiniteList
+          contacts={contacts}
+          total={total}
+          isLoading={!mounted || isLoading}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={!!hasNextPage}
+          onLoadMore={() => void fetchNextPage()}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          onToggle={toggleContact}
+          layout="grid"
+        />
       )}
 
       <SegmentSaveBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} />

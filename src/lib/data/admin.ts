@@ -32,51 +32,46 @@ export async function getAdminData() {
   await assertAdminAccess();
   if (!supabase) throw new Error("Unauthorized");
 
-  const [{ data: users }, { data: workspaces }, { data: flags }] = await Promise.all([
-    supabase.from("profiles").select("id, name, email, is_admin").order("created_at", {
-      ascending: false,
-    }),
-    supabase.from("workspaces").select("id, name, plan"),
-    supabase.from("feature_flags").select("key, enabled, description").order("key"),
-  ]);
+  const [{ data: users }, { data: workspaceStats }, { data: userCounts }, { data: flags }] =
+    await Promise.all([
+      supabase.from("profiles").select("id, name, email, is_admin").order("created_at", {
+        ascending: false,
+      }),
+      supabase.rpc("get_admin_workspace_stats"),
+      supabase.rpc("get_admin_user_workspace_counts"),
+      supabase.from("feature_flags").select("key, enabled, description").order("key"),
+    ]);
 
-  const workspaceRows = await Promise.all(
-    (workspaces ?? []).map(async (ws) => {
-      const [{ count: members }, { count: contacts }] = await Promise.all([
-        supabase
-          .from("workspace_members")
-          .select("*", { count: "exact", head: true })
-          .eq("workspace_id", ws.id),
-        supabase
-          .from("contacts")
-          .select("*", { count: "exact", head: true })
-          .eq("workspace_id", ws.id),
-      ]);
-      return {
-        id: ws.id,
-        name: ws.name,
-        members: members ?? 0,
-        plan: ws.plan,
-        contacts: contacts ?? 0,
-      };
+  const workspaceRows = (workspaceStats ?? []).map(
+    (ws: {
+      workspace_id: string;
+      name: string;
+      plan: string;
+      member_count: number;
+      contact_count: number;
+    }) => ({
+      id: ws.workspace_id,
+      name: ws.name,
+      members: ws.member_count,
+      plan: ws.plan,
+      contacts: ws.contact_count,
     }),
   );
 
-  const enrichedUsers = await Promise.all(
-    (users ?? []).map(async (u) => {
-      const { count } = await supabase
-        .from("workspace_members")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", u.id);
-      return {
-        id: u.id,
-        name: u.name || u.email,
-        email: u.email,
-        workspaces: count ?? 0,
-        admin: u.is_admin,
-      };
-    }),
+  const workspaceCountByUser = new Map(
+    (userCounts ?? []).map((row: { user_id: string; workspace_count: number }) => [
+      row.user_id,
+      row.workspace_count,
+    ]),
   );
+
+  const enrichedUsers = (users ?? []).map((u) => ({
+    id: u.id,
+    name: u.name || u.email,
+    email: u.email,
+    workspaces: workspaceCountByUser.get(u.id) ?? 0,
+    admin: u.is_admin,
+  }));
 
   return {
     users: enrichedUsers,
