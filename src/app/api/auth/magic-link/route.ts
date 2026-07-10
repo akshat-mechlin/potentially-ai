@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { magicLinkEmail } from "@/lib/email/templates";
 import { deliverAuthEmail } from "@/lib/email/auth-delivery";
-import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
+import { createAdminClient, ensurePublicActionLink, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
 const schema = z.object({
@@ -23,6 +23,21 @@ export async function POST(request: Request) {
       ? `${getAppUrl(request)}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
       : `${getAppUrl(request)}/api/auth/callback?next=/dashboard`;
 
+    if (redirectTo.includes("localhost") || redirectTo.includes("127.0.0.1")) {
+      console.error(
+        "[magic-link] Refusing localhost redirectTo:",
+        redirectTo,
+        "Set APP_URL / NEXT_PUBLIC_APP_URL to your production domain.",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Server is misconfigured for auth email redirects. Set APP_URL to your production domain.",
+        },
+        { status: 500 },
+      );
+    }
+
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "magiclink",
       email,
@@ -38,7 +53,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to generate sign-in link" }, { status: 500 });
     }
 
-    const template = magicLinkEmail(actionLink);
+    const publicActionLink = ensurePublicActionLink(actionLink, request);
+    const template = magicLinkEmail(publicActionLink);
     const delivery = await deliverAuthEmail({
       to: email,
       subject: template.subject,
@@ -51,7 +67,7 @@ export async function POST(request: Request) {
       }
 
       console.warn("[magic-link] Email not sent:", delivery.reason);
-      console.warn("[magic-link] Sign-in link:", actionLink);
+      console.warn("[magic-link] Sign-in link:", publicActionLink);
 
       return NextResponse.json(
         {

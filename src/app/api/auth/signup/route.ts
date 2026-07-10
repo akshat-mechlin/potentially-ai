@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { signupVerificationEmail } from "@/lib/email/templates";
 import { deliverAuthEmail } from "@/lib/email/auth-delivery";
-import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
+import { createAdminClient, ensurePublicActionLink, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
 const signupSchema = z.object({
@@ -66,7 +66,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to generate verification link" }, { status: 500 });
     }
 
-    const template = signupVerificationEmail(name, actionLink);
+    const publicActionLink = ensurePublicActionLink(actionLink, request);
+    const template = signupVerificationEmail(name, publicActionLink);
     const delivery = await deliverAuthEmail({
       to: email,
       subject: template.subject,

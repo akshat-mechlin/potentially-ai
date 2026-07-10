@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { passwordResetEmail } from "@/lib/email/templates";
 import { deliverAuthEmail } from "@/lib/email/auth-delivery";
-import { createAdminClient, getAppUrl } from "@/lib/supabase/admin";
+import { createAdminClient, ensurePublicActionLink, getAppUrl } from "@/lib/supabase/admin";
 import { isDemoMode } from "@/lib/app-config";
 
 const schema = z.object({
@@ -28,7 +28,11 @@ export async function POST(request: Request) {
 
     // Always return success to avoid email enumeration
     if (!error && data.properties?.action_link) {
-      const template = passwordResetEmail(data.properties.action_link);
+      const publicActionLink = ensurePublicActionLink(
+        data.properties.action_link,
+        request,
+      );
+      const template = passwordResetEmail(publicActionLink);
       const delivery = await deliverAuthEmail({
         to: email,
         subject: template.subject,
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
 
       if (!delivery.sent) {
         console.warn("[forgot-password] Email not sent:", delivery.reason);
-        console.warn("[forgot-password] Reset link:", data.properties.action_link);
+        console.warn("[forgot-password] Reset link:", publicActionLink);
       }
     }
 
