@@ -25,7 +25,17 @@ export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin;
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    // Email confirm / magic links may arrive as hash tokens (#access_token=...),
+    // which the server never sees. Send users to login so the client can recover the session.
+    const confirmUrl = new URL("/login", origin);
+    confirmUrl.searchParams.set("verified", "1");
+    if (dest && dest !== "/dashboard") {
+      confirmUrl.searchParams.set("next", dest);
+    }
+    if (invite) {
+      confirmUrl.searchParams.set("invite", invite);
+    }
+    return NextResponse.redirect(confirmUrl);
   }
 
   const response = NextResponse.redirect(`${origin}${dest}`);

@@ -39,13 +39,18 @@ function LoginFormContent() {
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
   const authError = searchParams.get("error");
+  const verified = searchParams.get("verified");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (verified === "1") {
+      toast.success("Email verified — finishing sign-in…");
+      return;
+    }
     if (authError === "auth") {
       toast.error("Sign-in failed. Check your credentials or try again.");
     }
-  }, [authError]);
+  }, [authError, verified]);
 
   const {
     register,

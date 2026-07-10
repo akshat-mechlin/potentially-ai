@@ -25,6 +25,21 @@ export async function POST(request: Request) {
       ? `${getAppUrl(request)}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
       : `${getAppUrl(request)}/api/auth/callback?next=/dashboard`;
 
+    if (redirectTo.includes("localhost") || redirectTo.includes("127.0.0.1")) {
+      console.error(
+        "[signup] Refusing localhost redirectTo in verification email:",
+        redirectTo,
+        "Set NEXT_PUBLIC_APP_URL=https://potentially.mechlintech.com and Supabase Site URL to the same domain.",
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Server is misconfigured for email verification redirects. Set NEXT_PUBLIC_APP_URL to your production domain.",
+        },
+        { status: 500 },
+      );
+    }
+
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
       email,

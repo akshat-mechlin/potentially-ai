@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
+import { AuthHashHandler } from "@/components/auth/auth-hash-handler";
 
+/**
+ * Blocks native GET auth submits and strips sensitive *query* params.
+ * Hash tokens (access_token / refresh_token) are handled by AuthHashHandler —
+ * do not strip them here or email verification sessions are lost.
+ */
 const AUTH_URL_GUARD_SCRIPT = `
 (function () {
   var sensitive = ${JSON.stringify(
@@ -15,9 +21,6 @@ const AUTH_URL_GUARD_SCRIPT = `
       "name",
       "full_name",
       "fullName",
-      "access_token",
-      "refresh_token",
-      "id_token",
       "apikey",
       "api_key",
       "secret",
@@ -40,22 +43,8 @@ const AUTH_URL_GUARD_SCRIPT = `
       var next = window.location.pathname;
       var rest = params.toString();
       if (rest) next += "?" + rest;
+      if (window.location.hash) next += window.location.hash;
       window.history.replaceState(null, "", next);
-    } catch (e) {}
-  }
-
-  function stripSessionHash() {
-    try {
-      var hash = window.location.hash || "";
-      var lower = hash.toLowerCase();
-      if (
-        lower.indexOf("access_token=") !== -1 ||
-        lower.indexOf("refresh_token=") !== -1 ||
-        lower.indexOf("id_token=") !== -1 ||
-        lower.indexOf("provider_token=") !== -1
-      ) {
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
-      }
     } catch (e) {}
   }
 
@@ -71,7 +60,6 @@ const AUTH_URL_GUARD_SCRIPT = `
   );
 
   stripSensitiveQuery();
-  stripSessionHash();
 })();
 `.trim();
 
@@ -79,6 +67,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <script dangerouslySetInnerHTML={{ __html: AUTH_URL_GUARD_SCRIPT }} />
+      <AuthHashHandler />
       {children}
     </>
   );
