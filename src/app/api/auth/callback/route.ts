@@ -3,26 +3,92 @@ import { getConnectorDefinition } from "@/lib/connectors/registry";
 import type { ConnectorKey } from "@/lib/connectors/types";
 import { saveConnectorFromSession, syncConnector } from "@/lib/data/connectors";
 import { joinWorkspaceFromInviteToken } from "@/lib/data/workspace-team";
+import { PENDING_CONNECTOR_COOKIE } from "@/lib/oauth/scopes";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
+
+function resolveConnectorKey(request: NextRequest): ConnectorKey | null {
+  const { searchParams } = request.nextUrl;
+  const connector = searchParams.get("connector") as ConnectorKey | null;
+  if (connector) return connector;
+
+  const legacyConnect = searchParams.get("connect");
+  if (legacyConnect === "google") return "google_contacts";
+  if (legacyConnect === "outlook") return "outlook";
+
+  const fromCookie = request.cookies.get(PENDING_CONNECTOR_COOKIE)?.value;
+  if (!fromCookie) return null;
+  try {
+    return decodeURIComponent(fromCookie) as ConnectorKey;
+  } catch {
+    return fromCookie as ConnectorKey;
+  }
+}
+
+function clearPendingConnector(response: NextResponse) {
+  response.cookies.set(PENDING_CONNECTOR_COOKIE, "", {
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+function connectorsErrorRedirect(origin: string, message: string, reconnect?: ConnectorKey) {
+  const url = new URL("/connectors", origin);
+  url.searchParams.set("connect_error", message.slice(0, 240));
+  if (reconnect) url.searchParams.set("reconnect", reconnect);
+  const response = NextResponse.redirect(url);
+  clearPendingConnector(response);
+  return response;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
-  const connector = searchParams.get("connector") as ConnectorKey | null;
+  const oauthError = searchParams.get("error");
+  const oauthErrorCode = searchParams.get("error_code");
+  const oauthErrorDescription = searchParams.get("error_description");
   const invite = searchParams.get("invite");
-  const legacyConnect = searchParams.get("connect");
+  const connectorKey = resolveConnectorKey(request);
 
-  const connectorKey =
-    connector ??
-    (legacyConnect === "google"
-      ? "google_contacts"
-      : legacyConnect === "outlook"
-        ? "outlook"
-        : null);
+  const rawNext = searchParams.get("next");
+  let dest = rawNext && rawNext.startsWith("/") ? rawNext : "/dashboard";
+  if (connectorKey) dest = "/connectors";
 
-  const dest = next.startsWith("/") ? next : `/${next}`;
   const origin = request.nextUrl.origin;
+
+  // Supabase returns error=* here when linkIdentity hits identity_already_exists, etc.
+  // Previously we ignored this and silently bounced to /login — no toast, no sync.
+  if (oauthError) {
+    const description = oauthErrorDescription
+      ? decodeURIComponent(oauthErrorDescription.replace(/\+/g, " "))
+      : oauthError;
+    console.error("[oauth.callback] provider error", {
+      oauthError,
+      oauthErrorCode,
+      description,
+      connectorKey,
+    });
+
+    if (connectorKey) {
+      const alreadyLinked =
+        oauthErrorCode === "identity_already_exists" ||
+        description.toLowerCase().includes("already linked");
+
+      if (alreadyLinked) {
+        return connectorsErrorRedirect(
+          origin,
+          "This Google account is already linked to your login. Click Connect again — we will re-request Contacts access.",
+          connectorKey,
+        );
+      }
+
+      return connectorsErrorRedirect(origin, description || "Google connection failed.");
+    }
+
+    const loginUrl = new URL("/login", origin);
+    loginUrl.searchParams.set("error", "auth");
+    loginUrl.searchParams.set("error_description", description.slice(0, 180));
+    return NextResponse.redirect(loginUrl);
+  }
 
   if (!code) {
     // Email confirm / magic links may arrive as hash tokens (#access_token=...),
@@ -35,6 +101,13 @@ export async function GET(request: NextRequest) {
     if (invite) {
       confirmUrl.searchParams.set("invite", invite);
     }
+    if (connectorKey) {
+      // Pending connector connect without code — surface it instead of a silent login bounce.
+      return connectorsErrorRedirect(
+        origin,
+        "Google did not return an authorization code. Try Connect again.",
+      );
+    }
     return NextResponse.redirect(confirmUrl);
   }
 
@@ -44,6 +117,13 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("OAuth callback session exchange failed:", error.message);
+    if (connectorKey) {
+      return connectorsErrorRedirect(
+        origin,
+        `Sign-in exchange failed: ${error.message}. Try Connect again.`,
+      );
+    }
+    clearPendingConnector(response);
     response.headers.set("Location", `${origin}/login?error=auth`);
     return response;
   }
@@ -62,6 +142,13 @@ export async function GET(request: NextRequest) {
 
   if (connectorKey) {
     const def = getConnectorDefinition(connectorKey);
+    const session = (await supabase.auth.getSession()).data.session;
+    console.log("[oauth.callback] connector connect", {
+      connectorKey,
+      hasProviderToken: Boolean(session?.provider_token),
+      userId: user?.id ?? null,
+    });
+
     try {
       await saveConnectorFromSession(supabase, connectorKey);
       let synced = false;
@@ -73,23 +160,26 @@ export async function GET(request: NextRequest) {
           console.error("Connector auto-sync failed:", syncError);
           const syncMessage =
             syncError instanceof Error ? syncError.message : "Sync failed after connect";
-          const url = new URL(dest, origin);
+          const url = new URL("/connectors", origin);
           url.searchParams.set("connected", connectorKey);
           url.searchParams.set("sync_error", syncMessage.slice(0, 180));
+          clearPendingConnector(response);
           response.headers.set("Location", url.toString());
           return response;
         }
       }
-      const url = new URL(dest, origin);
+      const url = new URL("/connectors", origin);
       url.searchParams.set("connected", connectorKey);
       if (synced) url.searchParams.set("synced", "1");
+      clearPendingConnector(response);
       response.headers.set("Location", url.toString());
     } catch (connectError) {
       console.error("Connector OAuth failed:", connectError);
       const message =
         connectError instanceof Error ? connectError.message : "Connection failed";
-      const url = new URL(dest, origin);
+      const url = new URL("/connectors", origin);
       url.searchParams.set("connect_error", message.slice(0, 240));
+      clearPendingConnector(response);
       response.headers.set("Location", url.toString());
     }
     return response;
@@ -103,5 +193,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  clearPendingConnector(response);
   return response;
 }

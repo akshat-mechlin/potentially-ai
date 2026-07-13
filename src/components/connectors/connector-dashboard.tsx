@@ -49,8 +49,9 @@ export function ConnectorDashboard() {
     const synced = searchParams.get("synced");
     const connectError = searchParams.get("connect_error");
     const syncError = searchParams.get("sync_error");
+    const reconnect = searchParams.get("reconnect") as ConnectorKey | null;
 
-    if (!connected && !connectError && !syncError) return;
+    if (!connected && !connectError && !syncError && !reconnect) return;
 
     if (connected) {
       const name = data?.connectors.find((c) => c.key === connected)?.name ?? connected;
@@ -69,10 +70,22 @@ export function ConnectorDashboard() {
 
     // Clear query params so remount/refetch doesn't re-toast.
     const url = new URL(window.location.href);
-    ["connected", "synced", "connect_error", "sync_error"].forEach((key) =>
+    ["connected", "synced", "connect_error", "sync_error", "reconnect"].forEach((key) =>
       url.searchParams.delete(key),
     );
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+
+    // After identity_already_exists, immediately retry with signInWithOAuth path.
+    if (reconnect === "google_contacts") {
+      void (async () => {
+        try {
+          toast.message("Retrying Google Contacts connect…");
+          await connectConnector(reconnect);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Failed to reconnect Google");
+        }
+      })();
+    }
   }, [searchParams, data?.connectors, queryClient]);
 
   const filtered = useMemo(() => {
@@ -116,14 +129,15 @@ export function ConnectorDashboard() {
   const handleConnect = async (key: ConnectorKey) => {
     setBusyAccountId("connect");
     try {
+      toast.message("Opening Google…");
       const result = await connectConnector(key);
       if (result.demo) {
         toast.success("Account connected (demo mode)");
         queryClient.invalidateQueries({ queryKey: ["connectors"] });
       }
+      // Real OAuth assigns window.location; keep busy state until navigation.
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to connect account");
-    } finally {
       setBusyAccountId(null);
     }
   };

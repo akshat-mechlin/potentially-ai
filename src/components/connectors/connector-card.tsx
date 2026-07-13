@@ -147,13 +147,13 @@ export function ConnectorCard({
         <div className="mt-3 flex flex-wrap gap-2">
           {isCustom ? (
             importSlot
-          ) : showAddAccount || !connector.connected ? (
+          ) : connector.canConnect && (showAddAccount || !connector.connected) ? (
             <Button
               size="sm"
               variant={connector.connected ? "outline" : "default"}
               className="h-8 rounded-full px-3 text-xs"
               onClick={() => onConnect(connector.key)}
-              disabled={Boolean(busyAccountId) && !connector.connected}
+              disabled={Boolean(busyAccountId)}
             >
               {connector.connected ? (
                 <>
@@ -236,12 +236,12 @@ export function ConnectorCard({
         <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-4">
           {isCustom ? (
             importSlot
-          ) : showAddAccount || !connector.connected ? (
+          ) : connector.canConnect && (showAddAccount || !connector.connected) ? (
             <Button
               size="sm"
               variant={connector.connected ? "outline" : "default"}
               onClick={() => onConnect(connector.key)}
-              disabled={Boolean(busyAccountId) && !connector.connected}
+              disabled={Boolean(busyAccountId)}
             >
               {connector.connected ? (
                 <>

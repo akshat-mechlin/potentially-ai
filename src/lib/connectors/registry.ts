@@ -1,5 +1,6 @@
 import type { ConnectorDefinition } from "./types";
 
+/** Only Google Contacts (+ CSV custom_data) are connectable for now; others are coming_soon. */
 export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
   {
     key: "google_contacts",
@@ -27,7 +28,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#34A853",
     brandInitial: "G",
     capabilities: ["calendar"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "google",
       scopes:
@@ -43,7 +44,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#EA4335",
     brandInitial: "M",
     capabilities: ["email", "contacts"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "google",
       scopes:
@@ -74,7 +75,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#0078D4",
     brandInitial: "O",
     capabilities: ["contacts", "email"],
-    availability: "live",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access Contacts.Read",
@@ -90,7 +91,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#106EBE",
     brandInitial: "C",
     capabilities: ["calendar"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access Calendars.Read",
@@ -105,7 +106,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#0A66C2",
     brandInitial: "in",
     capabilities: ["social", "contacts"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "linkedin_oidc",
       scopes: "openid profile email",
@@ -120,7 +121,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#1877F2",
     brandInitial: "f",
     capabilities: ["social"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "facebook",
       scopes: "email public_profile",
@@ -150,7 +151,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#000000",
     brandInitial: "X",
     capabilities: ["social"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "twitter",
       scopes: "users.read tweet.read offline.access",
@@ -165,7 +166,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandColor: "#24292F",
     brandInitial: "GH",
     capabilities: ["contacts", "social"],
-    availability: "beta",
+    availability: "coming_soon",
     oauth: {
       supabaseProvider: "github",
       scopes: "read:user user:email",
@@ -211,7 +212,8 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
   {
     key: "custom_data",
     name: "Custom Data",
-    description: "Upload one or more CSV/Excel files (multi-sheet supported). Download the template to keep the format.",
+    description:
+      "Upload one or more CSV/Excel files (multi-sheet supported). Download the template to keep the format.",
     category: "custom",
     categoryLabel: "Custom Data",
     brandColor: "#2D4739",
