@@ -211,7 +211,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
   {
     key: "custom_data",
     name: "Custom Data",
-    description: "Upload CSV or spreadsheet files with your own contact data.",
+    description: "Upload one or more CSV/Excel files (multi-sheet supported). Download the template to keep the format.",
     category: "custom",
     categoryLabel: "Custom Data",
     brandColor: "#2D4739",

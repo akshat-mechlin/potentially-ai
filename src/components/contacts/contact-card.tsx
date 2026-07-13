@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { Contact } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MobileListTile } from "@/components/mobile/native-ui";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { contactHref } from "@/lib/routes/contacts";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 
 interface ContactCardProps {
@@ -17,11 +19,12 @@ interface ContactCardProps {
 
 export function ContactCard({ contact, selectable, selected, onToggle }: ContactCardProps) {
   const { isMobileApp } = useMobileApp();
+  const profileHref = contactHref(contact.id);
 
   if (isMobileApp && !selectable) {
     return (
       <MobileListTile
-        href={`/contacts/${contact.id}`}
+        href={profileHref}
         leading={<span className="mobile-avatar-tile">{getInitials(contact.full_name)}</span>}
         title={contact.full_name}
         subtitle={[contact.title, contact.company_name].filter(Boolean).join(" · ")}
@@ -100,5 +103,14 @@ export function ContactCard({ contact, selectable, selected, onToggle }: Contact
     </Card>
   );
 
-  return inner;
+  if (selectable) return inner;
+
+  return (
+    <Link
+      href={profileHref}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {inner}
+    </Link>
+  );
 }

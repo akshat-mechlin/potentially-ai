@@ -20,7 +20,7 @@ export async function fetchOutlookContacts(accessToken: string): Promise<Importe
 
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Outlook contacts fetch failed: ${body.slice(0, 200)}`);
+      throw new Error(`Outlook contacts fetch failed: ${res.status} ${body.slice(0, 200)}`);
     }
 
     const data = (await res.json()) as {

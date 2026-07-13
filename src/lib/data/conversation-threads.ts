@@ -91,6 +91,48 @@ export async function getThreadMessages(
   return data ?? [];
 }
 
+export async function refreshThreadLastMessageAt(
+  supabase: SupabaseClient,
+  threadId: string,
+) {
+  const { data: latest } = await supabase
+    .from("thread_messages")
+    .select("created_at")
+    .eq("thread_id", threadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await supabase
+    .from("conversation_threads")
+    .update({ last_message_at: (latest?.created_at as string | null) ?? null })
+    .eq("id", threadId);
+}
+
+export async function deleteThreadMessage(
+  supabase: SupabaseClient,
+  threadId: string,
+  messageId: string,
+) {
+  const { data: message, error: loadError } = await supabase
+    .from("thread_messages")
+    .select("id, thread_id, message_type")
+    .eq("id", messageId)
+    .eq("thread_id", threadId)
+    .maybeSingle();
+
+  if (loadError) throw loadError;
+  if (!message) throw new Error("Message not found");
+  if (message.message_type === "system") {
+    throw new Error("System messages cannot be deleted");
+  }
+
+  const { error } = await supabase.from("thread_messages").delete().eq("id", messageId);
+  if (error) throw error;
+
+  await refreshThreadLastMessageAt(supabase, threadId);
+}
+
 type ThreadWriter = Pick<SupabaseClient, "from">;
 
 async function resolveProspectThread(

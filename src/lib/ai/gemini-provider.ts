@@ -5,6 +5,8 @@ import { outreachResultSchema, searchResultSchema } from "@/lib/ai/schemas";
 
 const EMBEDDING_DIMENSION = 1536;
 const GEMINI_CHAT_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+const GEMINI_EMBEDDING_MODEL =
+  process.env.GEMINI_EMBEDDING_MODEL?.trim() || "gemini-embedding-001";
 
 function getClient(): GoogleGenerativeAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -37,19 +39,30 @@ const outreachResponseSchema = {
   required: ["body", "cta"],
 } satisfies ResponseSchema;
 
+/** L2-normalize truncated Gemini embeddings (required for gemini-embedding-001 < 3072). */
+function normalizeEmbedding(values: number[]): number[] {
+  let sumSquares = 0;
+  for (const v of values) sumSquares += v * v;
+  const norm = Math.sqrt(sumSquares);
+  if (!norm || !Number.isFinite(norm)) return values;
+  return values.map((v) => v / norm);
+}
+
 export async function geminiGenerateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini not configured");
 
+  const input = text.trim().slice(0, 8000) || " ";
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "models/text-embedding-004",
-        content: { parts: [{ text }] },
+        model: `models/${GEMINI_EMBEDDING_MODEL}`,
+        content: { parts: [{ text: input }] },
         outputDimensionality: EMBEDDING_DIMENSION,
+        taskType: "RETRIEVAL_QUERY",
       }),
     },
   );
@@ -69,7 +82,7 @@ export async function geminiGenerateEmbedding(text: string): Promise<number[]> {
       `Gemini embedding dimension ${values.length} != ${EMBEDDING_DIMENSION}`,
     );
   }
-  return values;
+  return normalizeEmbedding(values);
 }
 
 export async function geminiParseSearchIntent(query: string) {
@@ -103,14 +116,33 @@ Return JSON matching: { contacts: [...], summary: string, suggested_actions: str
     `Query: "${query}"\n\nContacts:\n${JSON.stringify(contacts, null, 2)}`,
   );
   const parsed = parseModelJson<SearchResult>(result.response.text());
-  const validated = searchResultSchema.safeParse(parsed);
+  const byId = new Map(contacts.map((c) => [c.id, c]));
+  const hydrate = (rows: SearchResult["contacts"] | undefined) =>
+    (rows ?? [])
+      .map((row) => {
+        const source = byId.get(row.id);
+        if (!source && !row.full_name) return null;
+        return {
+          ...row,
+          full_name: row.full_name || source?.full_name || "Unknown",
+          title: row.title ?? source?.title ?? null,
+          email: row.email ?? source?.email ?? null,
+          company_name: row.company_name ?? source?.company_name ?? null,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  const validated = searchResultSchema.safeParse({
+    ...parsed,
+    contacts: hydrate(parsed.contacts),
+  });
 
   if (validated.success) {
     return validated.data;
   }
 
   return {
-    contacts: parsed.contacts ?? [],
+    contacts: hydrate(parsed.contacts),
     summary: parsed.summary ?? `Found contacts matching "${query}".`,
     suggested_actions: parsed.suggested_actions ?? [],
   };
@@ -157,17 +189,23 @@ ${params.context ? `Context: ${params.context}` : ""}`,
   };
 }
 
-export async function geminiGenerateContactSummary(contact: {
-  full_name: string;
-  title: string | null;
-  company_name: string | null;
-  bio: string | null;
-  tags: string[];
-}): Promise<string> {
+const CONTACT_SUMMARY_SYSTEM = `You write a straightforward third-person professional summary of a person.
+
+Style:
+- Start with the person's name, then who they are (role + company), like: "CJ is the Co-Founder and CEO of Diamond Kinetics."
+- Continue in natural third-person prose. Never write "this briefing", "this profile", "CRM", "relationship intelligence", "was added", "tagged", or "imported".
+- Use ONLY facts in the JSON. Do not invent details.
+- Prefer 2–4 short paragraphs, or one short paragraph plus a few "• " bullets for extra professional facts (industry, location, funding, seniority, etc.).
+- Cover useful career/company enrichment only.
+- Do NOT mention email, phone, LinkedIn, Twitter, websites, or that contact channels "are on file". Those appear elsewhere on the page.
+- Do NOT mention tags, import source, or how the record was created.
+- Plain text only. No markdown headings.`;
+
+export async function geminiGenerateContactSummary(contact: Record<string, unknown>): Promise<string> {
   const model = getClient().getGenerativeModel({
     model: GEMINI_CHAT_MODEL,
-    systemInstruction: "Generate a brief 2-3 sentence professional summary of this contact.",
-    generationConfig: { maxOutputTokens: 150, temperature: 0.4 },
+    systemInstruction: CONTACT_SUMMARY_SYSTEM,
+    generationConfig: { maxOutputTokens: 700, temperature: 0.3 },
   });
 
   const result = await model.generateContent(JSON.stringify(contact));

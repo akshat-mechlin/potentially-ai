@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
+import { contactHref } from "@/lib/routes/contacts";
 import { toast } from "sonner";
 
 interface SearchResultCardProps {
@@ -49,17 +50,17 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
       <Card className="border-border transition-shadow hover:border-primary/20 hover:shadow-md">
         <CardContent className="flex items-start gap-4 p-4">
           <Avatar className="h-10 w-10">
-            <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>
+            <AvatarFallback>{getInitials(contact.full_name ?? contact.email)}</AvatarFallback>
           </Avatar>
 
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <Link
-                  href={`/contacts/${contact.id}`}
+                  href={contactHref(contact.id)}
                   className="font-medium hover:underline"
                 >
-                  {contact.full_name}
+                  {contact.full_name || contact.email || "Unknown contact"}
                 </Link>
                 <p className="text-sm text-muted-foreground">
                   {contact.title}
@@ -103,14 +104,14 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
 
             <div className="flex items-center gap-2 pt-2">
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/contacts/${contact.id}`}>
+                <Link href={contactHref(contact.id)}>
                   View profile
                   <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
               </Button>
               {contact.email && (
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/contacts/${contact.id}?tab=outreach`}>
+                  <Link href={contactHref(contact.id, "outreach")}>
                     <Mail className="mr-1 h-3 w-3" />
                     Email
                   </Link>

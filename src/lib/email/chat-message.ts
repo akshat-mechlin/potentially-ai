@@ -1,6 +1,9 @@
 import { sendEmail } from "@/lib/email/send";
-import { getPlatformFromAddress } from "@/lib/email/from-address";
-import { resolveOutboundFromAddress } from "@/lib/email/from-address";
+import {
+  buildInboundReplyTo,
+  getPlatformFromAddress,
+  resolveOutboundFromAddress,
+} from "@/lib/email/from-address";
 import type { OutboundFromInputWithDomain } from "@/lib/data/workspace-email-settings";
 
 export async function sendChatMessageEmail(input: {
@@ -37,8 +40,14 @@ export async function sendChatMessageEmail(input: {
   `;
 
   const { from, replyTo } = input.emailSettings
-    ? resolveOutboundFromAddress(input.emailSettings, input.senderEmail ?? undefined)
-    : { from: getPlatformFromAddress(), replyTo: input.senderEmail ?? undefined };
+    ? resolveOutboundFromAddress(input.emailSettings, input.senderEmail ?? undefined, {
+        runContactId: input.runContactId,
+      })
+    : {
+        from: getPlatformFromAddress(),
+        replyTo:
+          buildInboundReplyTo(input.runContactId) || input.senderEmail || undefined,
+      };
 
   return sendEmail({
     to: input.to,

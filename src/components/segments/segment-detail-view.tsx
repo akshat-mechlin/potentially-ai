@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
+import { contactHref } from "@/lib/routes/contacts";
 import type { Contact } from "@/types";
 import type { Segment } from "@/types/playbooks";
 import { toast } from "sonner";
@@ -184,7 +185,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
             >
               <td className="px-4 py-3">
                 <Link
-                  href={`/contacts/${contact.id}`}
+                  href={contactHref(contact.id)}
                   className="flex items-center gap-3 hover:underline"
                 >
                   <Avatar className="h-9 w-9">
@@ -272,7 +273,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
             ) : (
               contacts.map((contact) => (
                 <div key={contact.id} className="mobile-list-tile">
-                  <Link href={`/contacts/${contact.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                  <Link href={contactHref(contact.id)} className="flex min-w-0 flex-1 items-center gap-3">
                     <span className="mobile-avatar-tile">{getInitials(contact.full_name)}</span>
                     <span className="mobile-tile-body">
                       <span className="mobile-tile-title">{contact.full_name}</span>

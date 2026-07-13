@@ -66,7 +66,8 @@ function toneSelectValue(tone: string) {
 }
 
 function goalSelectValue(goal: string) {
-  return GOAL_PRESETS.some((p) => p.value === goal) ? goal : goal ? CUSTOM : GOAL_PRESETS[0].value;
+  // Match tone behavior: empty / non-preset → Custom so the text input stays visible.
+  return GOAL_PRESETS.some((p) => p.value === goal) ? goal : CUSTOM;
 }
 
 interface SequenceEditorProps {

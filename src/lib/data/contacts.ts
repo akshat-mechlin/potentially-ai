@@ -161,7 +161,8 @@ export async function listContacts(
     .from("contacts")
     .select("*")
     .in("workspace_id", workspaceIds)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
 
   query = applyContactSearch(query, q);
 
@@ -321,34 +322,113 @@ export async function searchContactsForQuery(
 export async function importContacts(
   rows: Array<{
     full_name: string;
+    first_name?: string;
+    last_name?: string;
     email?: string;
     title?: string;
     company_name?: string;
+    phone?: string;
+    linkedin_url?: string;
+    twitter_url?: string;
+    location?: string;
+    extras?: Record<string, string>;
   }>,
+  options?: {
+    importBatchId?: string;
+    fileName?: string;
+    sheetName?: string;
+  },
 ) {
-  return importContactsFromSource(rows, "csv");
+  return importContactsFromSource(rows, "csv", {
+    skipEmbeddings: true,
+    importBatchId: options?.importBatchId,
+    fileName: options?.fileName,
+    sheetName: options?.sheetName,
+  });
+}
+
+type ImportOptions = {
+  skipEmbeddings?: boolean;
+  importBatchId?: string;
+  fileName?: string;
+  sheetName?: string;
+};
+
+type ImportRow = {
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  title?: string;
+  company_name?: string;
+  phone?: string;
+  linkedin_url?: string;
+  twitter_url?: string;
+  location?: string;
+  external_id?: string;
+  extras?: Record<string, string>;
+};
+
+const BULK_INSERT_SIZE = 200;
+
+function rowMetadata(row: ImportRow, base: Record<string, unknown>) {
+  return {
+    ...base,
+    ...(row.extras ?? {}),
+  };
+}
+
+function rowDbFields(row: ImportRow) {
+  return {
+    full_name: row.full_name,
+    first_name: row.first_name ?? null,
+    last_name: row.last_name ?? null,
+    email: row.email?.trim() || null,
+    title: row.title ?? null,
+    company_name: row.company_name ?? null,
+    phone: row.phone ?? null,
+    linkedin_url: row.linkedin_url ?? null,
+    twitter_url: row.twitter_url ?? null,
+    location: row.location ?? null,
+    external_id: row.external_id ?? null,
+  };
 }
 
 export async function importContactsFromSource(
-  rows: Array<{
-    full_name: string;
-    email?: string;
-    title?: string;
-    company_name?: string;
-    external_id?: string;
-  }>,
+  rows: ImportRow[],
   source: import("@/types").SyncSource,
+  options?: ImportOptions,
 ) {
   if (isDataDemoMode()) return importDemoContacts(rows);
 
   const { supabase, user, workspaceId } = await getUserWorkspaceContext();
   if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
+  const skipEmbeddings = options?.skipEmbeddings === true || source === "csv";
+  const importBatchId = options?.importBatchId;
+  const metadataBase: Record<string, unknown> = {};
+  if (importBatchId) metadataBase.import_batch_id = importBatchId;
+  if (options?.fileName) metadataBase.file_name = options.fileName;
+  if (options?.sheetName) metadataBase.sheet_name = options.sheetName;
+
+  // Fast path for CSV / large imports: bulk insert, no per-row AI embeddings.
+  if (skipEmbeddings) {
+    return bulkImportContacts(supabase, {
+      rows,
+      source,
+      workspaceId,
+      ownerId: user.id,
+      metadata: metadataBase,
+    });
+  }
+
   let imported = 0;
   let updated = 0;
 
   for (const row of rows) {
     const embedding = await buildContactEmbedding(row);
+    const metadata = rowMetadata(row, metadataBase);
+    const fields = rowDbFields(row);
 
     if (row.external_id) {
       const { data: existing } = await supabase
@@ -362,12 +442,10 @@ export async function importContactsFromSource(
         await supabase
           .from("contacts")
           .update({
-            full_name: row.full_name,
-            email: row.email ?? null,
-            title: row.title ?? null,
-            company_name: row.company_name ?? null,
+            ...fields,
             embedding,
             source,
+            metadata,
           })
           .eq("id", existing.id);
         updated += 1;
@@ -385,11 +463,10 @@ export async function importContactsFromSource(
         await supabase
           .from("contacts")
           .update({
-            full_name: row.full_name,
-            title: row.title ?? null,
-            company_name: row.company_name ?? null,
+            ...fields,
             embedding,
             source,
+            metadata,
           })
           .eq("id", existing.id);
         updated += 1;
@@ -398,19 +475,105 @@ export async function importContactsFromSource(
     }
 
     const { error } = await supabase.from("contacts").insert({
-      full_name: row.full_name,
-      email: row.email ?? null,
-      title: row.title ?? null,
-      company_name: row.company_name ?? null,
-      external_id: row.external_id ?? null,
+      ...fields,
       workspace_id: workspaceId,
       owner_id: user.id,
       source,
       tags: ["imported"],
       embedding,
+      metadata,
     });
 
     if (!error) imported += 1;
+  }
+
+  return { imported, updated, duplicates: 0 };
+}
+
+async function bulkImportContacts(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  args: {
+    rows: ImportRow[];
+    source: import("@/types").SyncSource;
+    workspaceId: string;
+    ownerId: string;
+    metadata: Record<string, unknown>;
+  },
+) {
+  const { rows, source, workspaceId, ownerId, metadata } = args;
+  let imported = 0;
+  let updated = 0;
+
+  const emails = [
+    ...new Set(
+      rows.map((r) => r.email?.trim()).filter((e): e is string => Boolean(e)),
+    ),
+  ];
+
+  const existingByEmail = new Map<string, string>();
+  for (let i = 0; i < emails.length; i += 500) {
+    const slice = emails.slice(i, i + 500);
+    const { data } = await supabase
+      .from("contacts")
+      .select("id, email")
+      .eq("workspace_id", workspaceId)
+      .in("email", slice);
+    for (const row of data ?? []) {
+      if (row.email) existingByEmail.set(String(row.email).toLowerCase(), row.id);
+    }
+  }
+
+  const toInsert: Array<Record<string, unknown>> = [];
+  const toUpdate: Array<{ id: string; row: ImportRow }> = [];
+
+  for (const row of rows) {
+    const emailKey = row.email?.trim().toLowerCase();
+    const existingId = emailKey ? existingByEmail.get(emailKey) : undefined;
+    if (existingId && existingId !== "pending") {
+      toUpdate.push({ id: existingId, row });
+      continue;
+    }
+    if (existingId === "pending") {
+      continue;
+    }
+    toInsert.push({
+      ...rowDbFields(row),
+      workspace_id: workspaceId,
+      owner_id: ownerId,
+      source,
+      tags: ["imported"],
+      metadata: rowMetadata(row, metadata),
+    });
+    if (emailKey) existingByEmail.set(emailKey, "pending");
+  }
+
+  for (let i = 0; i < toInsert.length; i += BULK_INSERT_SIZE) {
+    const chunk = toInsert.slice(i, i + BULK_INSERT_SIZE);
+    const { error, data } = await supabase.from("contacts").insert(chunk).select("id");
+    if (error) {
+      console.error("Bulk contact insert failed:", error.message);
+      throw new Error(error.message);
+    }
+    imported += data?.length ?? chunk.length;
+  }
+
+  const UPDATE_CONCURRENCY = 25;
+  for (let i = 0; i < toUpdate.length; i += UPDATE_CONCURRENCY) {
+    const wave = toUpdate.slice(i, i + UPDATE_CONCURRENCY);
+    const results = await Promise.all(
+      wave.map(({ id, row }) =>
+        supabase
+          .from("contacts")
+          .update({
+            ...rowDbFields(row),
+            source,
+            metadata: rowMetadata(row, metadata),
+          })
+          .eq("id", id),
+      ),
+    );
+    updated += results.filter((r: { error: unknown }) => !r.error).length;
   }
 
   return { imported, updated, duplicates: 0 };

@@ -17,6 +17,19 @@ const nextConfig: NextConfig = {
         source: "/playbooks/:playbookId/runs/:runId",
         destination: "/playbook-runs/:runId",
       },
+      {
+        source: "/contacts/:id",
+        destination: "/contact/:id",
+      },
+      // Nested /api/playbooks/runs/[runId]/* 404s under /api/playbooks/[id] in Next 16 — flatten.
+      {
+        source: "/api/playbooks/runs/:runId",
+        destination: "/api/playbook-runs/:runId",
+      },
+      {
+        source: "/api/playbooks/runs/:runId/:path*",
+        destination: "/api/playbook-runs/:runId/:path*",
+      },
     ];
   },
   headers: async () => [

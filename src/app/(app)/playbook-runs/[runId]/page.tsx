@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { playbookRunApiBase } from "@/lib/routes/playbook-runs";
 import type { PlaybookProspect, PlaybookRun } from "@/types/playbooks";
 
 type RunDetailResponse = {
@@ -24,7 +25,7 @@ export default function PlaybookRunPage() {
   const { data, isLoading, isError } = useQuery<RunDetailResponse>({
     queryKey: ["playbook-run", runId],
     queryFn: async () => {
-      const res = await fetch(`/api/playbooks/runs/${runId}`);
+      const res = await fetch(playbookRunApiBase(runId));
       if (!res.ok) {
         throw new Error("Run not found");
       }

@@ -57,5 +57,14 @@ export function flattenContactsPages(
   pages: ContactsListResponse[] | undefined,
 ): Contact[] {
   if (!pages?.length) return [];
-  return pages.flatMap((page) => page.contacts);
+  const seen = new Set<string>();
+  const contacts: Contact[] = [];
+  for (const page of pages) {
+    for (const contact of page.contacts) {
+      if (seen.has(contact.id)) continue;
+      seen.add(contact.id);
+      contacts.push(contact);
+    }
+  }
+  return contacts;
 }

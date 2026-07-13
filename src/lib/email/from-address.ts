@@ -59,16 +59,48 @@ export interface OutboundFromInput {
   customSenderEmail: string | null;
 }
 
+/**
+ * Domain that receives inbound mail via Resend (MX → Resend).
+ * Prefer a dedicated subdomain so primary mailbox MX is unchanged, e.g. inbound.mechlintech.com
+ */
+export function getInboundEmailDomain() {
+  const configured = process.env.EMAIL_INBOUND_DOMAIN?.trim().toLowerCase();
+  if (configured) return configured.replace(/^@/, "");
+  return null;
+}
+
+/** Reply-To that routes prospect replies into Resend inbound (+ tagging for match). */
+export function buildInboundReplyTo(runContactId: string) {
+  const domain = getInboundEmailDomain();
+  if (!domain || !runContactId) return undefined;
+  return `reply+${runContactId}@${domain}`;
+}
+
+export function parseRunContactIdFromInboundAddress(address: string) {
+  const email = parseDisplayFromAddress(address).email.toLowerCase();
+  const match = email.match(/^reply\+([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})@/i);
+  return match?.[1] ?? null;
+}
+
 export function resolveOutboundFromAddress(
   settings: OutboundFromInput,
   replyToEmail?: string | null,
+  options?: { runContactId?: string | null },
 ) {
+  const inboundReplyTo = options?.runContactId
+    ? buildInboundReplyTo(options.runContactId)
+    : undefined;
+
   if (settings.mode === "custom" && settings.customSenderEmail?.trim()) {
     return {
       from: formatFromAddress(settings.customSenderName, settings.customSenderEmail.trim()),
-      replyTo: settings.customSenderEmail.trim() || replyToEmail?.trim() || undefined,
+      // Prefer inbound Reply-To so replies hit Resend webhooks; fall back to sender mailbox.
+      replyTo: inboundReplyTo || settings.customSenderEmail.trim() || replyToEmail?.trim() || undefined,
     };
   }
 
-  return { from: getPlatformFromAddress() };
+  return {
+    from: getPlatformFromAddress(),
+    replyTo: inboundReplyTo || replyToEmail?.trim() || undefined,
+  };
 }

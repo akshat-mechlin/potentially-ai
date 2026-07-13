@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn } from "@/lib/utils";
+import { playbookRunApiBase } from "@/lib/routes/playbook-runs";
 import type { PlaybookProspect, PlaybookRun } from "@/types/playbooks";
 import { toast } from "sonner";
 
@@ -121,7 +122,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
 
   const { data, isLoading, refetch } = useQuery<RunDetailResponse>({
     queryKey: ["playbook-run", runId],
-    queryFn: () => fetch(`/api/playbooks/runs/${runId}`).then((r) => r.json()),
+    queryFn: () => fetch(playbookRunApiBase(runId)).then((r) => r.json()),
     enabled: mounted && !!runId,
   });
 
@@ -181,7 +182,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
     if (!selectedProspects.size) return;
     setBusy("finalize");
     try {
-      const res = await fetch(`/api/playbooks/runs/${runId}/finalize`, {
+      const res = await fetch(`${playbookRunApiBase(runId)}/finalize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prospect_ids: [...selectedProspects] }),
@@ -201,7 +202,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
     if (!selectedSkipped.size) return;
     setBusy("include-skipped");
     try {
-      const res = await fetch(`/api/playbooks/runs/${runId}/include-skipped`, {
+      const res = await fetch(`${playbookRunApiBase(runId)}/include-skipped`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prospect_ids: [...selectedSkipped] }),
@@ -221,7 +222,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
   const generateDrafts = async () => {
     setBusy("drafts");
     try {
-      const res = await fetch(`/api/playbooks/runs/${runId}/drafts`, { method: "POST" });
+      const res = await fetch(`${playbookRunApiBase(runId)}/drafts`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to generate drafts");
       toast.success("Drafts generated — review and approve to send");
       refetch();
@@ -237,13 +238,13 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
     try {
       const edit = draftEdits[prospectId];
       if (edit) {
-        await fetch(`/api/playbooks/runs/${runId}/prospects/${prospectId}`, {
+        await fetch(`${playbookRunApiBase(runId)}/prospects/${prospectId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ draft_subject: edit.subject, draft_body: edit.body }),
         });
       }
-      const res = await fetch(`/api/playbooks/runs/${runId}/send`, {
+      const res = await fetch(`${playbookRunApiBase(runId)}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prospect_id: prospectId }),
@@ -267,14 +268,14 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       for (const prospectId of ids) {
         const edit = draftEdits[prospectId];
         if (edit) {
-          await fetch(`/api/playbooks/runs/${runId}/prospects/${prospectId}`, {
+          await fetch(`${playbookRunApiBase(runId)}/prospects/${prospectId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ draft_subject: edit.subject, draft_body: edit.body }),
           });
         }
       }
-      const res = await fetch(`/api/playbooks/runs/${runId}/send/bulk`, {
+      const res = await fetch(`${playbookRunApiBase(runId)}/send/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prospect_ids: ids }),

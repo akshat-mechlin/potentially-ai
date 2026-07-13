@@ -34,8 +34,8 @@ export interface AgentModeNavItem {
 export const agentModeNav = {
   label: "Agent Mode",
   items: [
-    { href: "/playbooks", label: "Playbooks", icon: BookOpen },
     { href: "/segments", label: "Segments", icon: ListFilter },
+    { href: "/playbooks", label: "Playbooks", icon: BookOpen },
     { href: "/chats", label: "Chats", icon: MessageSquare },
   ] satisfies AgentModeNavItem[],
 };

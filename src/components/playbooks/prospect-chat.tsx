@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Mail, MessageSquare, Send } from "lucide-react";
+import { Loader2, Mail, MessageSquare, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -34,12 +34,23 @@ function threadQueryKey(runId: string, prospectId: string) {
   return ["prospect-thread", runId, prospectId] as const;
 }
 
-function MessageBubble({ msg, viewerRole }: { msg: ThreadMessage; viewerRole: "sender" | "recipient" }) {
+function MessageBubble({
+  msg,
+  viewerRole,
+  onDelete,
+  deleting,
+}: {
+  msg: ThreadMessage;
+  viewerRole: "sender" | "recipient";
+  onDelete?: (messageId: string) => void;
+  deleting?: boolean;
+}) {
   const isSystem = msg.message_type === "system";
   const isOwn = isOwnChatMessage(msg, viewerRole);
+  const canDelete = Boolean(onDelete) && isOwn && !isSystem && !msg.id.startsWith("pending-");
 
   return (
-    <div className="space-y-1">
+    <div className={cn("group space-y-1", isOwn && !isSystem && "flex flex-col items-end")}>
       {msg.message_type === "outbound_chat_email" && viewerRole === "sender" && (
         <p className="text-center text-[10px] text-muted-foreground">Sent via email invite</p>
       )}
@@ -49,15 +60,28 @@ function MessageBubble({ msg, viewerRole }: { msg: ThreadMessage; viewerRole: "s
       {msg.message_type === "inbound_email" && viewerRole === "sender" && (
         <p className="text-center text-[10px] text-muted-foreground">Reply via email</p>
       )}
-      <div
-        className={cn(
-          "w-fit max-w-[85%] rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
-          !isOwn && !isSystem && "mr-auto bg-muted",
-          isSystem && "mx-auto bg-muted/50 text-center text-xs text-muted-foreground",
-          isOwn && !isSystem && "ml-auto bg-primary text-primary-foreground",
+      <div className={cn("flex max-w-[85%] items-end gap-1", isOwn && !isSystem && "flex-row-reverse")}>
+        <div
+          className={cn(
+            "w-fit rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
+            !isOwn && !isSystem && "bg-muted",
+            isSystem && "mx-auto bg-muted/50 text-center text-xs text-muted-foreground",
+            isOwn && !isSystem && "bg-primary text-primary-foreground",
+          )}
+        >
+          {msg.body}
+        </div>
+        {canDelete && (
+          <button
+            type="button"
+            className="mb-1 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+            aria-label="Delete message"
+            disabled={deleting}
+            onClick={() => onDelete?.(msg.id)}
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
         )}
-      >
-        {msg.body}
       </div>
     </div>
   );
@@ -96,6 +120,7 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
   const instanceId = useId();
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { isMobileApp } = useMobileApp();
 
   const { data, isLoading } = useQuery<ThreadResponse>({
@@ -150,6 +175,28 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
             return {
               ...current,
               messages: [...current.messages, row],
+            };
+          });
+          void queryClient.invalidateQueries({ queryKey: ["chats"] });
+          void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "thread_messages",
+          filter: `thread_id=eq.${threadId}`,
+        },
+        (payload) => {
+          const row = payload.old as { id?: string };
+          if (!row.id) return;
+          queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              messages: current.messages.filter((message) => message.id !== row.id),
             };
           });
           void queryClient.invalidateQueries({ queryKey: ["chats"] });
@@ -231,13 +278,51 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
     }
   };
 
+  const deleteMessage = async (messageId: string) => {
+    if (!window.confirm("Delete this message?")) return;
+
+    const previous = queryClient.getQueryData<ThreadResponse>(threadQueryKey(runId, prospectId));
+    setDeletingId(messageId);
+    queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        messages: current.messages.filter((item) => item.id !== messageId),
+      };
+    });
+
+    try {
+      const res = await fetch(`/api/chats/${prospectId}/thread/${messageId}`, {
+        method: "DELETE",
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? "Failed to delete message");
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
+      toast.success("Message deleted");
+    } catch (error) {
+      if (previous) {
+        queryClient.setQueryData(threadQueryKey(runId, prospectId), previous);
+      }
+      toast.error(error instanceof Error ? error.message : "Failed to delete message");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const viewerRole = data?.viewer_role ?? "sender";
 
   const messages = (
     <div className="flex flex-col gap-3">
       {data && <DeliveryBanner data={data} />}
       {data?.messages.map((msg) => (
-        <MessageBubble key={msg.id} msg={msg} viewerRole={viewerRole} />
+        <MessageBubble
+          key={msg.id}
+          msg={msg}
+          viewerRole={viewerRole}
+          onDelete={(id) => void deleteMessage(id)}
+          deleting={deletingId === msg.id}
+        />
       ))}
       {!data?.messages.length && (
         <p className="py-8 text-center text-sm text-muted-foreground">No messages yet.</p>

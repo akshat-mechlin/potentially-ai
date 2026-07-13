@@ -33,15 +33,19 @@ export function NotificationBell() {
   useEffect(() => {
     if (!mounted || isDemoMode()) return;
 
+    let cancelled = false;
     let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
     const supabase = createClient();
 
     void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
       const userId = session?.user?.id;
       if (!userId) return;
 
-      channel = supabase
-        .channel(`notifications:${userId}`)
+      // Unique topic: React Strict Mode remounts before getSession resolves; reusing
+      // `notifications:${userId}` returns an already-subscribed channel and .on() throws.
+      const next = supabase
+        .channel(`notifications:${userId}:${crypto.randomUUID()}`)
         .on(
           "postgres_changes",
           {
@@ -55,9 +59,16 @@ export function NotificationBell() {
           },
         )
         .subscribe();
+
+      if (cancelled) {
+        void supabase.removeChannel(next);
+        return;
+      }
+      channel = next;
     });
 
     return () => {
+      cancelled = true;
       if (channel) {
         void supabase.removeChannel(channel);
       }

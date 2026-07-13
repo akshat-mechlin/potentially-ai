@@ -36,13 +36,15 @@ export function slugify(text: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function getInitials(name: string) {
+export function getInitials(name?: string | null) {
+  if (!name?.trim()) return "?";
   return name
-    .split(" ")
+    .split(/\s+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || "?";
 }
 
 export function truncate(str: string, length: number) {

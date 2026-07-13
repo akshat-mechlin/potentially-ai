@@ -850,6 +850,7 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
   const { from, replyTo } = resolveOutboundFromAddress(
     emailSettings,
     user.email ?? profile?.email,
+    { runContactId: prospectId },
   );
 
   const subject = prospect.draft_subject ?? "Hello from Potentially";

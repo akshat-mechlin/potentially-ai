@@ -29,10 +29,13 @@ export async function fetchGoogleContacts(accessToken: string): Promise<Imported
 
     if (!res.ok) {
       const body = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`Google contacts fetch failed: ${res.status} ${body.slice(0, 200)}`);
+      }
       throw new Error(
         body.includes("People API")
           ? "Enable Google People API in Google Cloud Console for your OAuth client."
-          : `Google contacts fetch failed: ${body.slice(0, 200)}`,
+          : `Google contacts fetch failed: ${res.status} ${body.slice(0, 200)}`,
       );
     }
 

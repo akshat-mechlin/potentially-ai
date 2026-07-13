@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Link2, Loader2, Plus, RefreshCw, Unplug } from "lucide-react";
+import { CheckCircle, Link2, Loader2, Plus, RefreshCw, Trash2, Unplug } from "lucide-react";
 import type { ConnectorAccount, ConnectorState } from "@/lib/connectors/types";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,19 @@ function AccountRow({
   canSync,
   onSync,
   onDisconnect,
+  removeLabel = "Disconnect",
+  removeIcon = "unplug",
 }: {
   account: ConnectorAccount;
   busy: boolean;
   canSync: boolean;
   onSync: () => void;
   onDisconnect: () => void;
+  removeLabel?: string;
+  removeIcon?: "unplug" | "trash";
 }) {
+  const RemoveIcon = removeIcon === "trash" ? Trash2 : Unplug;
+
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -42,8 +48,20 @@ function AccountRow({
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDisconnect} disabled={busy}>
-          <Unplug className="h-3.5 w-3.5" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={onDisconnect}
+          disabled={busy}
+          aria-label={removeLabel}
+          title={removeLabel}
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RemoveIcon className="h-3.5 w-3.5" />
+          )}
         </Button>
         {canSync && (
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={onSync} disabled={busy}>
@@ -104,6 +122,23 @@ export function ConnectorCard({
                 canSync={connector.canSync}
                 onSync={() => onSync(connector.key, account.id)}
                 onDisconnect={() => onDisconnect(account.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        {isCustom && connector.accounts.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {connector.accounts.map((account) => (
+              <AccountRow
+                key={account.id}
+                account={account}
+                busy={busyAccountId === account.id}
+                canSync={false}
+                onSync={() => undefined}
+                onDisconnect={() => onDisconnect(account.id)}
+                removeLabel="Remove CSV import"
+                removeIcon="trash"
               />
             ))}
           </div>
@@ -184,15 +219,16 @@ export function ConnectorCard({
         {isCustom && connector.accounts.length > 0 && (
           <div className="mt-4 space-y-2">
             {connector.accounts.map((account) => (
-              <div
+              <AccountRow
                 key={account.id}
-                className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm"
-              >
-                <p className="font-medium">{account.label}</p>
-                <p className="text-xs text-muted-foreground">
-                  {account.recordsCount.toLocaleString()} records · {account.lastSync}
-                </p>
-              </div>
+                account={account}
+                busy={busyAccountId === account.id}
+                canSync={false}
+                onSync={() => undefined}
+                onDisconnect={() => onDisconnect(account.id)}
+                removeLabel="Remove CSV import"
+                removeIcon="trash"
+              />
             ))}
           </div>
         )}

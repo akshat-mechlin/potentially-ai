@@ -160,5 +160,11 @@
     "name": "phase3_optimizations",
     "file": "20260710140000_phase3_optimizations.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260710180000",
+    "name": "chat_delete",
+    "file": "20260710180000_chat_delete.sql",
+    "remote": "applied"
   }
 ]

@@ -16,7 +16,7 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import type { Playbook, PlaybookProspect } from "@/types/playbooks";
 import { toast } from "sonner";
-import { playbookRunHref } from "@/lib/routes/playbook-runs";
+import { playbookRunApiBase, playbookRunHref } from "@/lib/routes/playbook-runs";
 
 type ProspectTab = "conversation" | "email" | "calendly";
 
@@ -39,7 +39,7 @@ export default function ProspectDetailPage() {
     queryFn: async () => {
       const pb = await fetch(`/api/playbooks/${playbookId}`).then((r) => r.json());
       for (const run of pb.runs ?? []) {
-        const detail = await fetch(`/api/playbooks/runs/${run.id}`).then((r) => r.json());
+        const detail = await fetch(playbookRunApiBase(run.id)).then((r) => r.json());
         const prospect = detail.prospects?.find((p: PlaybookProspect) => p.id === prospectId);
         if (prospect) {
           setRunId(run.id);
@@ -63,7 +63,7 @@ export default function ProspectDetailPage() {
     if (!runId) return;
     try {
       const res = await fetch(
-        `/api/playbooks/runs/${runId}/prospects/${prospectId}/book`,
+        `${playbookRunApiBase(runId)}/prospects/${prospectId}/book`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error("Failed");

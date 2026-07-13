@@ -1,5 +1,6 @@
 import { getConnectorDefinition } from "@/lib/connectors/registry";
 import type { ConnectorKey } from "@/lib/connectors/types";
+import { getOAuthCallbackAllowlistUrls } from "@/lib/oauth/scopes";
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: "Google",
@@ -56,15 +57,27 @@ export function formatOAuthError(error: unknown, connectorKey?: ConnectorKey): s
     normalized.includes("unsupported provider") ||
     code === "validation_failed"
   ) {
-    return `${providerLabel} is not enabled in Supabase. Open Authentication → Providers in your Supabase project, turn on ${providerLabel}, and add the OAuth client ID and secret from the provider's developer console.`;
+    return `${providerLabel} is not enabled in Supabase. Open Authentication → Providers, turn on ${providerLabel}, and paste the OAuth client ID and secret.`;
   }
 
   if (normalized.includes("manual linking")) {
-    return `Account linking is disabled. In Supabase go to Authentication → Settings and enable "Manual linking" to connect multiple accounts.`;
+    return `Account linking is disabled. In Supabase go to Authentication → Providers (or Auth settings) and enable Manual linking so you can connect Google/Microsoft while already signed in.`;
   }
 
-  if (normalized.includes("redirect") || normalized.includes("callback")) {
-    return `OAuth redirect URL mismatch. Add ${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:1020"}/api/auth/callback to Supabase → Authentication → URL Configuration → Redirect URLs.`;
+  if (
+    normalized.includes("redirect") ||
+    normalized.includes("callback") ||
+    normalized.includes("redirect_uri_mismatch")
+  ) {
+    const urls = getOAuthCallbackAllowlistUrls().join(" and ");
+    return `OAuth redirect URL mismatch. In Supabase → Authentication → URL Configuration, add: ${urls}`;
+  }
+
+  if (
+    normalized.includes("identity is already linked") ||
+    normalized.includes("identity_already_exists")
+  ) {
+    return `${providerLabel} is already linked to this user. Click Connect again — we'll re-prompt for Contacts permission so tokens can be saved.`;
   }
 
   return message;

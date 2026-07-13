@@ -66,7 +66,7 @@ export function importDemoContacts(
     title?: string;
     company_name?: string;
   }>,
-): { imported: number; duplicates: number } {
+): { imported: number; updated: number; duplicates: number } {
   const existingEmails = new Set(
     getDemoContacts()
       .map((c) => c.email?.toLowerCase())
@@ -111,7 +111,7 @@ export function importDemoContacts(
     imported++;
   }
 
-  return { imported, duplicates };
+  return { imported, updated: 0, duplicates };
 }
 
 export function filterContactsByQuery(query: string, contacts: Contact[]) {

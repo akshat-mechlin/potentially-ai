@@ -98,6 +98,7 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   linkedin_url: string | null;
+  twitter_url?: string | null;
   company_id: string | null;
   company_name: string | null;
   location: string | null;

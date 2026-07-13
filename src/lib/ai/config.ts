@@ -48,7 +48,8 @@ export async function withProviderFallback<T>(
       return await run(provider);
     } catch (error) {
       lastError = error;
-      console.warn(`[ai] ${label} failed via ${provider}`, error);
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[ai] ${label} failed via ${provider}: ${message}`);
     }
   }
 

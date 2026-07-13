@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatRelativeTime } from "@/lib/utils";
+import { contactHref } from "@/lib/routes/contacts";
 import type { Contact, DashboardStats } from "@/types";
 
 export function DashboardClient() {
@@ -80,7 +81,7 @@ export function DashboardClient() {
             recentContacts.map((c) => (
               <MobileListTile
                 key={c.id}
-                href={`/contacts/${c.id}`}
+                href={contactHref(c.id)}
                 icon={Users}
                 title={c.full_name}
                 subtitle={c.company_name ?? c.title ?? undefined}
@@ -183,7 +184,7 @@ export function DashboardClient() {
               recentContacts.map((c) => (
                 <Link
                   key={c.id}
-                  href={`/contacts/${c.id}`}
+                  href={contactHref(c.id)}
                   className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
                 >
                   <div className="flex items-center gap-3">

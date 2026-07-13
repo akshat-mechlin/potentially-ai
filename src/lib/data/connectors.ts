@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { isDataDemoMode } from "@/lib/app-config";
 import { CONNECTOR_REGISTRY, getConnectorDefinition } from "@/lib/connectors/registry";
 import {
@@ -158,11 +157,12 @@ export async function listConnectorStates(): Promise<{
   }
 
   if (csvCount > 0 && !accountsByKey.has("custom_data")) {
+    // Contacts imported before per-file tracking (or connector row missing).
     accountsByKey.set("custom_data", [
       {
         id: "csv-aggregate",
         email: null,
-        label: "Imported files",
+        label: "CSV contacts",
         status: "active",
         recordsCount: csvCount,
         lastSync: "Recently",
@@ -258,7 +258,9 @@ export async function saveConnectorFromSession(
 
   const accessToken = session.provider_token;
   if (!accessToken) {
-    throw new Error("No provider access token received. Approve all requested permissions.");
+    throw new Error(
+      "No provider access token received. In Supabase enable Manual linking, approve all permissions on the consent screen, then try Connect again. If you signed in with this Google/Microsoft account already, pick the same account and allow Contacts access.",
+    );
   }
 
   const { workspaceId } = await getUserWorkspaceContext(supabase);
@@ -348,7 +350,15 @@ export async function syncConnector(
 
   for (const account of accounts) {
     if (def.syncSource === "google_contacts" || def.syncSource === "outlook") {
-      const result = await syncConnectorAccount(account, def.syncSource);
+      const result = await syncConnectorAccount(account, def.syncSource, async (tokens) => {
+        await supabase
+          .from("data_connectors")
+          .update({
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken,
+          })
+          .eq("id", account.id);
+      });
       totalImported += result.imported;
       totalUpdated += result.updated;
       totalFetched += result.total_fetched;
@@ -396,11 +406,33 @@ export async function disconnectConnectorAccount(accountId: string) {
   const { supabase, user, workspaceId } = await getUserWorkspaceContext();
   if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
+  // Synthetic row when CSV contacts exist without a data_connectors import record.
+  if (accountId === "csv-aggregate") {
+    const { error: deleteContactsError } = await supabase
+      .from("contacts")
+      .delete()
+      .eq("workspace_id", workspaceId)
+      .eq("source", "csv");
+
+    if (deleteContactsError) throw deleteContactsError;
+
+    // Clean up any orphaned custom_data connector rows for this user/workspace.
+    await supabase
+      .from("data_connectors")
+      .delete()
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .eq("connector_key", "custom_data");
+
+    return { success: true, removedContacts: true };
+  }
+
   const { data: row } = await supabase
     .from("data_connectors")
-    .select("connector_key")
+    .select("id, connector_key, provider_account_id, metadata")
     .eq("id", accountId)
     .eq("user_id", user.id)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
 
   if (!row) {
@@ -408,7 +440,29 @@ export async function disconnectConnectorAccount(accountId: string) {
   }
 
   if (row.connector_key === "custom_data") {
-    throw new Error("Remove custom data imports from the Contacts page.");
+    const batchId =
+      row.provider_account_id ||
+      (typeof row.metadata?.import_batch_id === "string"
+        ? row.metadata.import_batch_id
+        : null);
+
+    if (batchId) {
+      await supabase
+        .from("contacts")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("source", "csv")
+        .contains("metadata", { import_batch_id: batchId });
+    }
+
+    const { error } = await supabase
+      .from("data_connectors")
+      .delete()
+      .eq("id", accountId)
+      .eq("user_id", user.id);
+
+    if (error) throw error;
+    return { success: true, removedContacts: true };
   }
 
   const { error } = await supabase
@@ -421,22 +475,38 @@ export async function disconnectConnectorAccount(accountId: string) {
   return { success: true };
 }
 
-export async function markCustomDataImported(count: number, fileName?: string) {
+export async function markCustomDataImported(
+  count: number,
+  fileName?: string,
+  options?: { importBatchId?: string; sheetName?: string },
+) {
   const { supabase, user, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) return;
+  if (!supabase || !user || !workspaceId) {
+    return { importBatchId: options?.importBatchId ?? `csv-${Date.now()}` };
+  }
 
-  const label = fileName || `Import ${new Date().toLocaleDateString()}`;
-  const importId = `csv-${Date.now()}`;
+  const importBatchId = options?.importBatchId ?? `csv-${Date.now()}`;
+  const label =
+    fileName && options?.sheetName
+      ? `${fileName} · ${options.sheetName}`
+      : fileName || `Import ${new Date().toLocaleDateString()}`;
 
   await supabase.from("data_connectors").insert({
     user_id: user.id,
     workspace_id: workspaceId,
     connector_key: "custom_data",
-    provider_account_id: importId,
+    provider_account_id: importBatchId,
     account_label: label,
     status: "active",
     last_synced_at: new Date().toISOString(),
     records_count: count,
-    metadata: { source: "csv_upload", file_name: fileName },
+    metadata: {
+      source: "csv_upload",
+      file_name: fileName,
+      sheet_name: options?.sheetName,
+      import_batch_id: importBatchId,
+    },
   });
+
+  return { importBatchId };
 }

@@ -1,6 +1,10 @@
 import { listAuditEvents } from "@/lib/data/audit";
 import { filterThreadMessagesForViewer } from "@/lib/chat/thread-visibility";
-import { getThreadForRunContact, getThreadMessages } from "@/lib/data/conversation-threads";
+import {
+  deleteThreadMessage,
+  getThreadForRunContact,
+  getThreadMessages,
+} from "@/lib/data/conversation-threads";
 import { isFeatureEnabled } from "@/lib/data/feature-flags";
 import { getProspectThreadMessages, getProspectThreadContext } from "@/lib/data/playbooks";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
@@ -178,9 +182,45 @@ function activityFromAudit(action: string, metadata: Record<string, unknown>, cr
   };
 }
 
+type ChatHideSets = {
+  threadIds: Set<string>;
+  runContactIds: Set<string>;
+};
+
+async function getChatHideSets(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  userId: string,
+): Promise<ChatHideSets> {
+  const { data, error } = await supabase
+    .from("chat_hides")
+    .select("thread_id, run_contact_id")
+    .eq("user_id", userId);
+
+  if (error) throw error;
+
+  const threadIds = new Set<string>();
+  const runContactIds = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.thread_id) threadIds.add(row.thread_id as string);
+    if (row.run_contact_id) runContactIds.add(row.run_contact_id as string);
+  }
+  return { threadIds, runContactIds };
+}
+
+function isChatHidden(
+  hides: ChatHideSets,
+  options: { threadId?: string | null; runContactId?: string | null },
+) {
+  if (options.threadId && hides.threadIds.has(options.threadId)) return true;
+  if (options.runContactId && hides.runContactIds.has(options.runContactId)) return true;
+  return false;
+}
+
 export async function listWorkspaceChats(): Promise<ChatInboxItem[]> {
-  const { supabase, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !workspaceId) return [];
+  const { supabase, workspaceId, user } = await getUserWorkspaceContext();
+  if (!supabase || !workspaceId || !user) return [];
+
+  const hides = await getChatHideSets(supabase, user.id);
 
   const { data: prospects, error } = await supabase
     .from("playbook_run_contacts")
@@ -254,6 +294,14 @@ export async function listWorkspaceChats(): Promise<ChatInboxItem[]> {
 
     const prospectId = row.id as string;
     const thread = threadByContact.get(contact.id);
+    if (
+      isChatHidden(hides, {
+        threadId: thread?.id as string | undefined,
+        runContactId: prospectId,
+      })
+    ) {
+      continue;
+    }
     const lastMessage = lastMessageByContact.get(contact.id);
     const messageCount = countByContact.get(contact.id) ?? 0;
     const status = row.status as PlaybookProspectStatus;
@@ -302,6 +350,8 @@ export async function listReceivedChats(): Promise<ChatInboxItem[]> {
   const { supabase, user } = await getUserWorkspaceContext();
   if (!supabase || !user) return [];
 
+  const hides = await getChatHideSets(supabase, user.id);
+
   const { data: threads, error } = await supabase
     .from("conversation_threads")
     .select(
@@ -314,12 +364,21 @@ export async function listReceivedChats(): Promise<ChatInboxItem[]> {
   if (error) throw error;
   if (!threads?.length) return [];
 
-  const threadIds = threads.map((thread) => thread.id as string);
+  const visibleThreads = threads.filter(
+    (thread) =>
+      !isChatHidden(hides, {
+        threadId: thread.id as string,
+        runContactId: thread.run_contact_id as string | null,
+      }),
+  );
+  if (!visibleThreads.length) return [];
+
+  const threadIds = visibleThreads.map((thread) => thread.id as string);
   const lastMessageByThread = new Map<string, { body: string; created_at: string }>();
   const countByThread = new Map<string, number>();
 
   const statsByThread = await fetchThreadInboxStats(supabase, threadIds, true);
-  for (const thread of threads) {
+  for (const thread of visibleThreads) {
     const stat = statsByThread.get(thread.id as string);
     if (!stat) continue;
     countByThread.set(thread.id as string, stat.message_count);
@@ -331,7 +390,7 @@ export async function listReceivedChats(): Promise<ChatInboxItem[]> {
     }
   }
 
-  return threads
+  return visibleThreads
     .filter((thread) => (countByThread.get(thread.id as string) ?? 0) > 0)
     .map((thread) => {
       const threadId = thread.id as string;
@@ -587,4 +646,40 @@ export async function getChatDetail(runContactId: string): Promise<ChatDetail | 
     recipient_on_platform: threadContext.recipient_on_platform,
     viewer_role: threadContext.viewer_role,
   };
+}
+
+/** Remove a conversation from the current user's inbox (does not delete for the other party). */
+export async function hideChat(runContactId: string) {
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) throw new Error("Unauthorized");
+
+  const thread = await getThreadForRunContact(supabase, runContactId, user.id);
+  const rows: Array<{ user_id: string; thread_id?: string; run_contact_id?: string }> = [
+    { user_id: user.id, run_contact_id: runContactId },
+  ];
+  if (thread?.id) {
+    rows.push({ user_id: user.id, thread_id: thread.id });
+  }
+
+  for (const row of rows) {
+    const { error } = await supabase.from("chat_hides").insert(row);
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes("duplicate") || error.code === "23505") continue;
+      throw error;
+    }
+  }
+
+  return { success: true as const };
+}
+
+export async function deleteChatMessage(runContactId: string, messageId: string) {
+  const { supabase, user } = await getUserWorkspaceContext();
+  if (!supabase || !user) throw new Error("Unauthorized");
+
+  const thread = await getThreadForRunContact(supabase, runContactId, user.id);
+  if (!thread) throw new Error("Conversation not found");
+
+  await deleteThreadMessage(supabase, thread.id, messageId);
+  return { success: true as const };
 }

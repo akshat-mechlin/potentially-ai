@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { MessageSquare } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { MessageSquare, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +14,7 @@ import { MobileSearchBar } from "@/components/mobile/native-ui";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn, formatRelativeTime, getInitials } from "@/lib/utils";
 import type { ChatInboxItem } from "@/types/chats";
+import { toast } from "sonner";
 
 function statusLabel(status: ChatInboxItem["status"]) {
   return status.replace(/_/g, " ");
@@ -36,7 +40,10 @@ export function ChatInboxList({
   compact = false,
 }: ChatInboxListProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { isMobileApp } = useMobileApp();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = chats.filter((chat) => {
     if (!search.trim()) return true;
@@ -49,6 +56,33 @@ export function ChatInboxList({
       chat.last_message_preview?.toLowerCase().includes(q)
     );
   });
+
+  const deleteChat = async (runContactId: string) => {
+    if (
+      !window.confirm(
+        "Delete this conversation from your inbox? The other person will still see it.",
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(runContactId);
+    try {
+      const res = await fetch(`/api/chats/${runContactId}`, { method: "DELETE" });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? "Failed to delete conversation");
+      await queryClient.invalidateQueries({ queryKey: ["chats"] });
+      queryClient.removeQueries({ queryKey: ["chat-detail", runContactId] });
+      toast.success("Conversation deleted");
+      if (pathname === `/chats/${runContactId}`) {
+        router.push("/chats");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete conversation");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -97,11 +131,11 @@ export function ChatInboxList({
                 pathname === href ||
                 Boolean(selectedContactId && chat.contact_id === selectedContactId);
               return (
-                <li key={`${chat.direction}:${chat.contact_id}`}>
+                <li key={`${chat.direction}:${chat.contact_id}`} className="group relative">
                   <Link
                     href={href}
                     className={cn(
-                      "flex gap-3 px-3 py-3 transition-colors hover:bg-muted/50",
+                      "flex gap-3 px-3 py-3 pr-12 transition-colors hover:bg-muted/50",
                       isActive && "bg-secondary/80",
                     )}
                   >
@@ -147,6 +181,21 @@ export function ChatInboxList({
                       </div>
                     </div>
                   </Link>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-3 h-8 w-8 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus:opacity-100"
+                    aria-label={`Delete conversation with ${chat.contact_name}`}
+                    disabled={deletingId === chat.run_contact_id}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void deleteChat(chat.run_contact_id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </li>
               );
             })}

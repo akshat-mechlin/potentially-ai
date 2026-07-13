@@ -48,6 +48,9 @@ export function ConnectorDashboard() {
     const connected = searchParams.get("connected");
     const synced = searchParams.get("synced");
     const connectError = searchParams.get("connect_error");
+    const syncError = searchParams.get("sync_error");
+
+    if (!connected && !connectError && !syncError) return;
 
     if (connected) {
       const name = data?.connectors.find((c) => c.key === connected)?.name ?? connected;
@@ -55,10 +58,21 @@ export function ConnectorDashboard() {
         synced ? `${name} account connected and synced` : `${name} account connected`,
       );
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
     }
     if (connectError) {
       toast.error(decodeURIComponent(connectError));
     }
+    if (syncError) {
+      toast.error(`Connected, but sync failed: ${decodeURIComponent(syncError)}`);
+    }
+
+    // Clear query params so remount/refetch doesn't re-toast.
+    const url = new URL(window.location.href);
+    ["connected", "synced", "connect_error", "sync_error"].forEach((key) =>
+      url.searchParams.delete(key),
+    );
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   }, [searchParams, data?.connectors, queryClient]);
 
   const filtered = useMemo(() => {
@@ -136,13 +150,32 @@ export function ConnectorDashboard() {
   };
 
   const handleDisconnect = async (accountId: string) => {
+    const isCsvImport =
+      data?.connectors
+        .find((c) => c.key === "custom_data")
+        ?.accounts.some((a) => a.id === accountId) ?? false;
+
+    if (isCsvImport) {
+      const isLegacyAggregate = accountId === "csv-aggregate";
+      const ok = window.confirm(
+        isLegacyAggregate
+          ? "Remove all CSV-imported contacts from your network?"
+          : "Remove this CSV import and delete its contacts from your network?",
+      );
+      if (!ok) return;
+    }
+
     setBusyAccountId(accountId);
     try {
       const res = await fetch(`/api/connectors?id=${accountId}`, { method: "DELETE" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Disconnect failed");
-      toast.success("Account disconnected");
+      toast.success(isCsvImport ? "CSV import removed" : "Account disconnected");
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
+      if (isCsvImport) {
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+        queryClient.invalidateQueries({ queryKey: ["graph"] });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Disconnect failed");
     } finally {

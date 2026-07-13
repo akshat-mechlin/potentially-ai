@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ExternalLink, Mail, MessageSquare } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ExternalLink, Loader2, Mail, MessageSquare, Trash2 } from "lucide-react";
 import { ProspectChat } from "@/components/playbooks/prospect-chat";
 import { ChatActivityTimeline } from "@/components/chats/chat-activity-timeline";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import type { ChatDetail } from "@/types/chats";
+import { toast } from "sonner";
 
 interface ChatDetailPanelProps {
   runContactId: string;
@@ -26,6 +29,9 @@ function statusLabel(status: string) {
 export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDetailPanelProps) {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [deleting, setDeleting] = useState(false);
 
   const { data, isLoading, error } = useQuery<ChatDetail>({
     queryKey: ["chat-detail", runContactId],
@@ -36,6 +42,31 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
     },
     enabled: mounted && !!runContactId,
   });
+
+  const deleteConversation = async () => {
+    if (
+      !window.confirm(
+        "Delete this conversation from your inbox? The other person will still see it.",
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/chats/${runContactId}`, { method: "DELETE" });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? "Failed to delete conversation");
+      await queryClient.invalidateQueries({ queryKey: ["chats"] });
+      queryClient.removeQueries({ queryKey: ["chat-detail", runContactId] });
+      toast.success("Conversation deleted");
+      router.push("/chats");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete conversation");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (!mounted || isLoading) {
     return <Skeleton className="h-full min-h-[320px] w-full rounded-lg" />;
@@ -55,9 +86,22 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
     );
   }
 
-  const { inbox, activities, chat_enabled, viewer_role } = data;
+  const { inbox, activities, chat_enabled } = data;
   const prospectHref = `/playbooks/${inbox.playbook_id}/prospects/${runContactId}`;
   const showProspectLink = inbox.direction === "outreach" && inbox.playbook_id;
+
+  const deleteButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+      onClick={() => void deleteConversation()}
+      disabled={deleting}
+    >
+      {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
+      Delete
+    </Button>
+  );
 
   const header = (
     <div className="shrink-0 border-b border-border bg-card px-4 py-3">
@@ -100,6 +144,7 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
               </Link>
             </Button>
           )}
+          {deleteButton}
         </div>
       </div>
     </div>
@@ -120,9 +165,16 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
               {inbox.company_name ?? inbox.playbook_name}
             </p>
           </div>
-          <Badge variant="outline" className="shrink-0 text-[10px] capitalize">
-            {statusLabel(inbox.status)}
-          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full text-destructive"
+            onClick={() => void deleteConversation()}
+            disabled={deleting}
+            aria-label="Delete conversation"
+          >
+            {deleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
+          </Button>
         </div>
 
         <Tabs defaultValue="chat" className="flex min-h-0 flex-1 flex-col">

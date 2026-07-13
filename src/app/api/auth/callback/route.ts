@@ -44,7 +44,8 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("OAuth callback session exchange failed:", error.message);
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    response.headers.set("Location", `${origin}/login?error=auth`);
+    return response;
   }
 
   const {
@@ -65,21 +66,31 @@ export async function GET(request: NextRequest) {
       await saveConnectorFromSession(supabase, connectorKey);
       let synced = false;
       if (def?.syncSource === "google_contacts" || def?.syncSource === "outlook") {
-        await syncConnector(connectorKey, undefined, supabase);
-        synced = true;
+        try {
+          await syncConnector(connectorKey, undefined, supabase);
+          synced = true;
+        } catch (syncError) {
+          console.error("Connector auto-sync failed:", syncError);
+          const syncMessage =
+            syncError instanceof Error ? syncError.message : "Sync failed after connect";
+          const url = new URL(dest, origin);
+          url.searchParams.set("connected", connectorKey);
+          url.searchParams.set("sync_error", syncMessage.slice(0, 180));
+          response.headers.set("Location", url.toString());
+          return response;
+        }
       }
-      response.headers.set(
-        "Location",
-        `${origin}${dest}?connected=${connectorKey}${synced ? "&synced=1" : ""}`,
-      );
+      const url = new URL(dest, origin);
+      url.searchParams.set("connected", connectorKey);
+      if (synced) url.searchParams.set("synced", "1");
+      response.headers.set("Location", url.toString());
     } catch (connectError) {
       console.error("Connector OAuth failed:", connectError);
       const message =
         connectError instanceof Error ? connectError.message : "Connection failed";
-      response.headers.set(
-        "Location",
-        `${origin}${dest}?connect_error=${encodeURIComponent(message)}`,
-      );
+      const url = new URL(dest, origin);
+      url.searchParams.set("connect_error", message.slice(0, 240));
+      response.headers.set("Location", url.toString());
     }
     return response;
   }

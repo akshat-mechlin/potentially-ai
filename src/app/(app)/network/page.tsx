@@ -7,6 +7,7 @@ import { MobileEmpty, MobileMenuItem, MobileMenuList } from "@/components/mobile
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Skeleton } from "@/components/ui/skeleton";
+import { contactHref } from "@/lib/routes/contacts";
 import type { GraphData } from "@/types";
 
 export default function NetworkPage() {
@@ -35,7 +36,7 @@ export default function NetworkPage() {
             {contactNodes.map((node) => (
               <MobileMenuItem
                 key={node.id}
-                href={`/contacts/${node.id}`}
+                href={contactHref(node.id)}
                 label={node.name}
                 iconMuted
               />
