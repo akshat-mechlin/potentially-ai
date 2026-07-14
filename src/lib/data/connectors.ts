@@ -25,6 +25,7 @@ type ConnectorRow = {
   account_label: string | null;
   provider_account_id: string | null;
   metadata: Record<string, unknown> | null;
+  auto_sync_enabled?: boolean | null;
 };
 
 const DEMO_ACCOUNTS: Partial<Record<ConnectorKey, ConnectorAccount[]>> = {
@@ -36,6 +37,7 @@ const DEMO_ACCOUNTS: Partial<Record<ConnectorKey, ConnectorAccount[]>> = {
       status: "active",
       recordsCount: 214,
       lastSync: "2 hours ago",
+      autoSyncEnabled: false,
     },
     {
       id: "demo-g2",
@@ -44,6 +46,7 @@ const DEMO_ACCOUNTS: Partial<Record<ConnectorKey, ConnectorAccount[]>> = {
       status: "active",
       recordsCount: 128,
       lastSync: "1 day ago",
+      autoSyncEnabled: false,
     },
   ],
   outlook: [
@@ -54,6 +57,7 @@ const DEMO_ACCOUNTS: Partial<Record<ConnectorKey, ConnectorAccount[]>> = {
       status: "active",
       recordsCount: 156,
       lastSync: "1 day ago",
+      autoSyncEnabled: false,
     },
   ],
   custom_data: [
@@ -64,6 +68,7 @@ const DEMO_ACCOUNTS: Partial<Record<ConnectorKey, ConnectorAccount[]>> = {
       status: "active",
       recordsCount: 89,
       lastSync: "3 days ago",
+      autoSyncEnabled: false,
     },
   ],
 };
@@ -79,6 +84,8 @@ function accountLabel(row: ConnectorRow): string {
 }
 
 function rowToAccount(row: ConnectorRow): ConnectorAccount {
+  const importBatchId =
+    typeof row.metadata?.import_batch_id === "string" ? row.metadata.import_batch_id : null;
   return {
     id: row.id,
     email: row.account_email,
@@ -86,6 +93,8 @@ function rowToAccount(row: ConnectorRow): ConnectorAccount {
     status: (row.status as ConnectorStatus) || "active",
     recordsCount: row.records_count ?? 0,
     lastSync: row.last_synced_at ? formatLastSync(row.last_synced_at) : "Never",
+    importBatchId,
+    autoSyncEnabled: Boolean(row.auto_sync_enabled),
   };
 }
 
@@ -112,7 +121,7 @@ export async function listConnectorStates(): Promise<{
     supabase
       .from("data_connectors")
       .select(
-        "id, connector_key, status, last_synced_at, records_count, access_token, account_email, account_label, provider_account_id, metadata",
+        "id, connector_key, status, last_synced_at, records_count, access_token, account_email, account_label, provider_account_id, metadata, auto_sync_enabled",
       )
       .eq("workspace_id", workspaceId)
       .eq("user_id", user.id)
@@ -152,6 +161,7 @@ export async function listConnectorStates(): Promise<{
         status: "active",
         recordsCount: key === "outlook" ? outlookCount : googleCount,
         lastSync: leg.last_synced_at ? formatLastSync(leg.last_synced_at) : "Never",
+        autoSyncEnabled: false,
       },
     ]);
   }
@@ -166,6 +176,7 @@ export async function listConnectorStates(): Promise<{
         status: "active",
         recordsCount: csvCount,
         lastSync: "Recently",
+        autoSyncEnabled: false,
       },
     ]);
   }
@@ -197,6 +208,9 @@ function buildConnectorState(
     def.key !== "custom_data" &&
     def.syncSource !== undefined;
 
+  const autoSyncEnabled =
+    canSync && accounts.length > 0 && accounts.every((account) => Boolean(account.autoSyncEnabled));
+
   return {
     key: def.key,
     name: def.name,
@@ -216,6 +230,7 @@ function buildConnectorState(
     canConnect,
     canSync,
     supportsMultipleAccounts,
+    autoSyncEnabled,
   };
 }
 
@@ -279,6 +294,16 @@ export async function saveConnectorFromSession(
   const providerAccountId = identity?.id ?? accountEmail ?? `oauth-${Date.now()}`;
   const accountLabel = accountEmail ?? providerAccountId;
 
+  const { data: siblingAutoSync } = await supabase
+    .from("data_connectors")
+    .select("auto_sync_enabled")
+    .eq("user_id", session.user.id)
+    .eq("workspace_id", workspaceId)
+    .eq("connector_key", connectorKey)
+    .eq("auto_sync_enabled", true)
+    .limit(1)
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from("data_connectors")
     .upsert(
@@ -292,6 +317,7 @@ export async function saveConnectorFromSession(
         access_token: accessToken,
         refresh_token: session.provider_refresh_token ?? null,
         status: "active",
+        auto_sync_enabled: Boolean(siblingAutoSync?.auto_sync_enabled),
         metadata: {
           connected_via: "oauth",
           supabase_provider: def.oauth.supabaseProvider,
@@ -349,7 +375,12 @@ export async function syncConnector(
   let totalFetched = 0;
 
   for (const account of accounts) {
-    if (def.syncSource === "google_contacts" || def.syncSource === "outlook") {
+    if (
+      def.syncSource === "google_contacts" ||
+      def.syncSource === "google_calendar" ||
+      def.syncSource === "gmail" ||
+      def.syncSource === "outlook"
+    ) {
       const result = await syncConnectorAccount(account, def.syncSource, async (tokens) => {
         await supabase
           .from("data_connectors")
@@ -386,7 +417,12 @@ export async function syncConnector(
     ? accounts[0]?.account_label || accounts[0]?.account_email || "account"
     : `${accounts.length} account${accounts.length === 1 ? "" : "s"}`;
 
-  if (def.syncSource === "google_contacts" || def.syncSource === "outlook") {
+  if (
+    def.syncSource === "google_contacts" ||
+    def.syncSource === "google_calendar" ||
+    def.syncSource === "gmail" ||
+    def.syncSource === "outlook"
+  ) {
     return {
       message: `Synced ${totalImported} new and ${totalUpdated} updated records from ${accountLabel}.`,
       imported: totalImported,
@@ -509,4 +545,128 @@ export async function markCustomDataImported(
   });
 
   return { importBatchId };
+}
+
+/** Opt all accounts for a connector into/out of daily auto-sync. */
+export async function setConnectorAutoSync(connectorKey: ConnectorKey, enabled: boolean) {
+  const def = getConnectorDefinition(connectorKey);
+  if (!def?.syncSource || def.key === "custom_data" || def.availability === "coming_soon") {
+    throw new Error("Auto-sync is not available for this connector.");
+  }
+
+  if (isDataDemoMode()) {
+    const accounts = DEMO_ACCOUNTS[connectorKey] ?? [];
+    for (const account of accounts) account.autoSyncEnabled = enabled;
+    return { updated: accounts.length, enabled };
+  }
+
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+
+  const { data, error } = await supabase
+    .from("data_connectors")
+    .update({ auto_sync_enabled: enabled, updated_at: new Date().toISOString() })
+    .eq("user_id", user.id)
+    .eq("workspace_id", workspaceId)
+    .eq("connector_key", connectorKey)
+    .eq("status", "active")
+    .select("id");
+
+  if (error) throw error;
+  if (!data?.length) {
+    throw new Error(`Connect ${def.name} before enabling auto-sync.`);
+  }
+
+  return { updated: data.length, enabled };
+}
+
+/** Cron job: sync accounts with auto-sync that are due (≥ 24h since last sync). */
+export async function processDueConnectorAutoSyncs() {
+  if (isDataDemoMode()) {
+    return { processed: 0, synced: 0, failed: 0, skipped: 0 };
+  }
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const { data: rows, error } = await admin
+    .from("data_connectors")
+    .select(
+      "id, user_id, workspace_id, connector_key, access_token, refresh_token, last_synced_at, status, auto_sync_enabled",
+    )
+    .eq("auto_sync_enabled", true)
+    .eq("status", "active")
+    .limit(200);
+
+  if (error) throw error;
+
+  const dueRows = (rows ?? []).filter((row) => {
+    if (!row.last_synced_at) return true;
+    return new Date(row.last_synced_at).getTime() <= Date.now() - 24 * 60 * 60 * 1000;
+  });
+
+  let synced = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const row of dueRows.slice(0, 100)) {
+    const def = getConnectorDefinition(row.connector_key);
+    const source = def?.syncSource;
+    if (
+      !def ||
+      !source ||
+      source === "csv" ||
+      def.availability === "coming_soon" ||
+      !row.access_token
+    ) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      const result = await syncConnectorAccount(
+        {
+          id: row.id,
+          access_token: row.access_token,
+          refresh_token: row.refresh_token,
+          connector_key: row.connector_key,
+        },
+        source,
+        async (tokens) => {
+          await admin
+            .from("data_connectors")
+            .update({
+              access_token: tokens.accessToken,
+              refresh_token: tokens.refreshToken,
+            })
+            .eq("id", row.id);
+        },
+        {
+          supabase: admin,
+          userId: row.user_id,
+          workspaceId: row.workspace_id,
+        },
+      );
+
+      await admin
+        .from("data_connectors")
+        .update({
+          last_synced_at: new Date().toISOString(),
+          records_count: result.imported + result.updated,
+          status: "active",
+        })
+        .eq("id", row.id);
+
+      synced += 1;
+    } catch (syncError) {
+      failed += 1;
+      console.error(`Auto-sync failed for connector ${row.id}:`, syncError);
+    }
+  }
+
+  return {
+    processed: dueRows.length,
+    synced,
+    failed,
+    skipped,
+  };
 }

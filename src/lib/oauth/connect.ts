@@ -32,11 +32,25 @@ function userHasProviderIdentity(user: User | null, provider: string) {
 }
 
 function oauthQueryParams(supabaseProvider: string): Record<string, string> {
-  // Google: offline + consent ensures refresh_token is issued (and re-issued on reconnect).
+  // Always force account chooser; Google also needs consent for refresh tokens.
   if (supabaseProvider === "google") {
-    return { access_type: "offline", prompt: "consent select_account" };
+    return { access_type: "offline", prompt: "select_account consent" };
   }
-  return { prompt: "consent" };
+  // Azure: select_account + consent so Contacts.Read + offline_access are granted.
+  if (supabaseProvider === "azure") {
+    return { prompt: "select_account" };
+  }
+  return { prompt: "select_account" };
+}
+
+function missingOAuthUrlMessage(supabaseProvider: string) {
+  if (supabaseProvider === "azure") {
+    return "Microsoft did not return a sign-in URL. Check Supabase → Authentication → Providers → Azure is enabled, then try again.";
+  }
+  if (supabaseProvider === "google") {
+    return "Google did not return a sign-in URL. Check Supabase → Authentication → Providers → Google is enabled, then try again.";
+  }
+  return "OAuth provider did not return a sign-in URL. Check Supabase → Authentication → Providers.";
 }
 
 /**
@@ -98,9 +112,7 @@ export async function connectConnector(connectorKey: ConnectorKey) {
     }
 
     if (!linked.data?.url) {
-      throw new Error(
-        "Google did not return a link URL. Check Supabase → Authentication → Providers → Google.",
-      );
+      throw new Error(missingOAuthUrlMessage(oauth.supabaseProvider));
     }
 
     window.location.assign(linked.data.url);
@@ -117,9 +129,7 @@ export async function connectConnector(connectorKey: ConnectorKey) {
   }
 
   if (!signedIn.data?.url) {
-    throw new Error(
-      "Google did not return a sign-in URL. Check Supabase → Authentication → Providers → Google is enabled, then try again.",
-    );
+    throw new Error(missingOAuthUrlMessage(oauth.supabaseProvider));
   }
 
   window.location.assign(signedIn.data.url);

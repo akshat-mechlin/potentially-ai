@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import type { ChatDeliveryMode } from "@/types/chats";
 import type { ThreadMessage } from "@/types/playbooks";
 import { toast } from "sonner";
@@ -122,6 +123,7 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { isMobileApp } = useMobileApp();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const { data, isLoading } = useQuery<ThreadResponse>({
     queryKey: threadQueryKey(runId, prospectId),
@@ -279,7 +281,12 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
   };
 
   const deleteMessage = async (messageId: string) => {
-    if (!window.confirm("Delete this message?")) return;
+    const confirmed = await confirm({
+      title: "Delete this message?",
+      description: "This permanently removes the message from the conversation.",
+      confirmLabel: "Delete message",
+    });
+    if (!confirmed) return;
 
     const previous = queryClient.getQueryData<ThreadResponse>(threadQueryKey(runId, prospectId));
     setDeletingId(messageId);
@@ -358,6 +365,7 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
             <Send className="h-4 w-4" />
           </Button>
         </div>
+        {confirmDialog}
       </div>
     );
   }
@@ -382,6 +390,7 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
           <Send className="h-4 w-4" />
         </Button>
       </div>
+      {confirmDialog}
     </div>
   );
 }

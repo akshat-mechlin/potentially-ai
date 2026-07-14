@@ -4,7 +4,7 @@ import type { ConnectorKey } from "@/lib/connectors/types";
 import { saveConnectorFromSession, syncConnector } from "@/lib/data/connectors";
 import { joinWorkspaceFromInviteToken } from "@/lib/data/workspace-team";
 import { PENDING_CONNECTOR_COOKIE } from "@/lib/oauth/scopes";
-import { resolveAppUrl } from "@/lib/supabase/admin";
+import { resolveOAuthReturnOrigin } from "@/lib/app-url";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 function resolveConnectorKey(request: NextRequest): ConnectorKey | null {
@@ -41,6 +41,14 @@ function connectorsErrorRedirect(origin: string, message: string, reconnect?: Co
   return response;
 }
 
+function friendlyAuthError(description: string) {
+  const lower = description.toLowerCase();
+  if (lower.includes("getting user email") || lower.includes("user email from external")) {
+    return "Microsoft did not return an email for this account. In Azure → App registration → Token configuration, add optional claim “email” (and “xms_edov”) on the ID token, ensure Graph permissions include email + User.Read, then try again.";
+  }
+  return description;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
@@ -54,8 +62,8 @@ export async function GET(request: NextRequest) {
   let dest = rawNext && rawNext.startsWith("/") ? rawNext : "/dashboard";
   if (connectorKey) dest = "/connectors";
 
-  // Prefer APP_URL / public host over request.nextUrl.origin (often localhost behind tunnel).
-  const origin = resolveAppUrl(request);
+  // Return to the same host that handled the callback (localhost or production).
+  const origin = resolveOAuthReturnOrigin(request);
 
   // Supabase returns error=* here when linkIdentity hits identity_already_exists, etc.
   // Previously we ignored this and silently bounced to /login — no toast, no sync.
@@ -70,25 +78,44 @@ export async function GET(request: NextRequest) {
       connectorKey,
     });
 
-    if (connectorKey) {
-      const alreadyLinked =
-        oauthErrorCode === "identity_already_exists" ||
-        description.toLowerCase().includes("already linked");
+    const friendly = friendlyAuthError(description);
 
+    if (connectorKey) {
+      const lower = description.toLowerCase();
+      const alreadyLinked =
+        oauthErrorCode === "identity_already_exists" || lower.includes("already linked");
+      const linkedToOtherUser = lower.includes("another user");
+      const def = getConnectorDefinition(connectorKey);
+      const providerLabel =
+        def?.oauth?.supabaseProvider === "azure"
+          ? "Microsoft"
+          : def?.oauth?.supabaseProvider === "google"
+            ? "Google"
+            : "This";
+
+      // Linked to a *different* Supabase user — do not auto-reconnect (that would switch sessions).
+      if (alreadyLinked && linkedToOtherUser) {
+        return connectorsErrorRedirect(
+          origin,
+          `${providerLabel} account is already linked to a different Potentially user. Pick a different account in the chooser, or sign in with that ${providerLabel} account instead.`,
+        );
+      }
+
+      // Already on this user (linkIdentity after Sign in with …) → retry via signInWithOAuth.
       if (alreadyLinked) {
         return connectorsErrorRedirect(
           origin,
-          "This Google account is already linked to your login. Click Connect again — we will re-request Contacts access.",
+          `${providerLabel} is already on your login. Reconnecting to request access…`,
           connectorKey,
         );
       }
 
-      return connectorsErrorRedirect(origin, description || "Google connection failed.");
+      return connectorsErrorRedirect(origin, friendly || "Connection failed.");
     }
 
     const loginUrl = new URL("/login", origin);
     loginUrl.searchParams.set("error", "auth");
-    loginUrl.searchParams.set("error_description", description.slice(0, 180));
+    loginUrl.searchParams.set("error_description", friendly.slice(0, 280));
     return NextResponse.redirect(loginUrl);
   }
 
@@ -154,7 +181,12 @@ export async function GET(request: NextRequest) {
     try {
       await saveConnectorFromSession(supabase, connectorKey);
       let synced = false;
-      if (def?.syncSource === "google_contacts" || def?.syncSource === "outlook") {
+      if (
+        def?.syncSource === "google_contacts" ||
+        def?.syncSource === "google_calendar" ||
+        def?.syncSource === "gmail" ||
+        def?.syncSource === "outlook"
+      ) {
         try {
           await syncConnector(connectorKey, undefined, supabase);
           synced = true;

@@ -8,6 +8,7 @@ import { CsvImportButton } from "@/components/contacts/csv-import-button";
 import { ConnectorCard } from "@/components/connectors/connector-card";
 import { ConnectorSetupBanner } from "@/components/connectors/connector-setup-banner";
 import { DesktopOnly, MobileKpiStrip, MobileSectionLabel } from "@/components/mobile/primitives";
+import { useConnectorActions } from "@/hooks/use-connector-actions";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { connectConnector } from "@/lib/oauth/connect";
@@ -36,7 +37,6 @@ export function ConnectorDashboard() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<ConnectorsResponse>({
     queryKey: ["connectors"],
@@ -44,9 +44,11 @@ export function ConnectorDashboard() {
     enabled: mounted,
   });
 
+  const { busyAccountId, handleConnect, handleToggleAutoSync, invalidateConnectorQueries } =
+    useConnectorActions(data?.connectors);
+
   useEffect(() => {
     const connected = searchParams.get("connected");
-    const synced = searchParams.get("synced");
     const connectError = searchParams.get("connect_error");
     const syncError = searchParams.get("sync_error");
     const reconnect = searchParams.get("reconnect") as ConnectorKey | null;
@@ -54,10 +56,6 @@ export function ConnectorDashboard() {
     if (!connected && !connectError && !syncError && !reconnect) return;
 
     if (connected) {
-      const name = data?.connectors.find((c) => c.key === connected)?.name ?? connected;
-      toast.success(
-        synced ? `${name} account connected and synced` : `${name} account connected`,
-      );
       queryClient.invalidateQueries({ queryKey: ["connectors"] });
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
     }
@@ -68,21 +66,18 @@ export function ConnectorDashboard() {
       toast.error(`Connected, but sync failed: ${decodeURIComponent(syncError)}`);
     }
 
-    // Clear query params so remount/refetch doesn't re-toast.
     const url = new URL(window.location.href);
     ["connected", "synced", "connect_error", "sync_error", "reconnect"].forEach((key) =>
       url.searchParams.delete(key),
     );
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
 
-    // After identity_already_exists, immediately retry with signInWithOAuth path.
-    if (reconnect === "google_contacts") {
+    if (reconnect) {
       void (async () => {
         try {
-          toast.message("Retrying Google Contacts connect…");
           await connectConnector(reconnect);
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Failed to reconnect Google");
+          toast.error(error instanceof Error ? error.message : "Failed to reconnect");
         }
       })();
     }
@@ -126,85 +121,15 @@ export function ConnectorDashboard() {
     })).filter((g) => g.items.length > 0);
   }, [filtered, activeCategory]);
 
-  const handleConnect = async (key: ConnectorKey) => {
-    setBusyAccountId("connect");
-    try {
-      toast.message("Opening Google…");
-      const result = await connectConnector(key);
-      if (result.demo) {
-        toast.success("Account connected (demo mode)");
-        queryClient.invalidateQueries({ queryKey: ["connectors"] });
-      }
-      // Real OAuth assigns window.location; keep busy state until navigation.
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to connect account");
-      setBusyAccountId(null);
-    }
-  };
-
-  const handleSync = async (key: ConnectorKey, accountId?: string) => {
-    setBusyAccountId(accountId ?? "all");
-    try {
-      const res = await fetch("/api/connectors/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connector_key: key, account_id: accountId }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Sync failed");
-      toast.success(result.message);
-      queryClient.invalidateQueries({ queryKey: ["connectors"] });
-      queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      queryClient.invalidateQueries({ queryKey: ["graph"] });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sync failed");
-    } finally {
-      setBusyAccountId(null);
-    }
-  };
-
-  const handleDisconnect = async (accountId: string) => {
-    const isCsvImport =
-      data?.connectors
-        .find((c) => c.key === "custom_data")
-        ?.accounts.some((a) => a.id === accountId) ?? false;
-
-    if (isCsvImport) {
-      const isLegacyAggregate = accountId === "csv-aggregate";
-      const ok = window.confirm(
-        isLegacyAggregate
-          ? "Remove all CSV-imported contacts from your network?"
-          : "Remove this CSV import and delete its contacts from your network?",
-      );
-      if (!ok) return;
-    }
-
-    setBusyAccountId(accountId);
-    try {
-      const res = await fetch(`/api/connectors?id=${accountId}`, { method: "DELETE" });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Disconnect failed");
-      toast.success(isCsvImport ? "CSV import removed" : "Account disconnected");
-      queryClient.invalidateQueries({ queryKey: ["connectors"] });
-      if (isCsvImport) {
-        queryClient.invalidateQueries({ queryKey: ["contacts"] });
-        queryClient.invalidateQueries({ queryKey: ["graph"] });
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Disconnect failed");
-    } finally {
-      setBusyAccountId(null);
-    }
-  };
-
   const stats = data?.stats;
 
   return (
     <div className={isMobileApp ? "space-y-4 pb-2" : "space-y-8"}>
       <DesktopOnly>
         <p className="text-sub text-muted-foreground">
-          Connect multiple accounts per platform. Add a work Google, personal Gmail, second Outlook
-          inbox, and more. Works whether you signed in with email or OAuth.
+          Open a connector to manage accounts, sync, or disconnect. Use Auto-sync on a card to
+          refresh records every 24 hours. Add multiple accounts per platform, or import CSV / Excel
+          under Custom.
         </p>
       </DesktopOnly>
 
@@ -239,7 +164,13 @@ export function ConnectorDashboard() {
         </div>
       )}
 
-      <div className={isMobileApp ? "space-y-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>
+      <div
+        className={
+          isMobileApp
+            ? "space-y-3"
+            : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+        }
+      >
         <div className={`relative max-w-md ${isMobileApp ? "w-full" : "flex-1"}`}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -317,26 +248,25 @@ export function ConnectorDashboard() {
                   <span className="text-xs text-muted-foreground">({group.items.length})</span>
                 </div>
               )}
-              <div className={isMobileApp ? "space-y-2" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"}>
+              <div
+                className={
+                  isMobileApp ? "space-y-2" : "grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+                }
+              >
                 {group.items.map((connector) => (
                   <ConnectorCard
                     key={connector.key}
                     connector={connector}
                     busyAccountId={busyAccountId}
                     onConnect={handleConnect}
-                    onSync={handleSync}
-                    onDisconnect={handleDisconnect}
+                    onToggleAutoSync={handleToggleAutoSync}
                     importSlot={
                       connector.key === "custom_data" ? (
                         <CsvImportButton
                           variant="outline"
                           size="sm"
                           label="Import"
-                          onImported={() => {
-                            queryClient.invalidateQueries({ queryKey: ["connectors"] });
-                            queryClient.invalidateQueries({ queryKey: ["contacts"] });
-                            queryClient.invalidateQueries({ queryKey: ["graph"] });
-                          }}
+                          onImported={invalidateConnectorQueries}
                         />
                       ) : undefined
                     }

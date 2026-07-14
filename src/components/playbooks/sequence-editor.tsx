@@ -15,6 +15,7 @@ import {
 import { FieldHint } from "@/components/playbooks/field-hint";
 import { DesktopOnly } from "@/components/mobile/primitives";
 import { useIsClient } from "@/hooks/use-is-client";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn } from "@/lib/utils";
 import type { SequenceStep } from "@/types/playbooks";
@@ -77,6 +78,7 @@ interface SequenceEditorProps {
 export function SequenceEditor({ playbookId }: SequenceEditorProps) {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [busy, setBusy] = useState(false);
   const [sequenceSteps, setSequenceSteps] = useState<DraftStep[]>([
     {
@@ -287,9 +289,15 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
                   variant="ghost"
                   size="sm"
                   className="text-destructive"
-                  onClick={() =>
-                    setSequenceSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index))
-                  }
+                  onClick={async () => {
+                    const confirmed = await confirm({
+                      title: "Remove this step?",
+                      description: "This step will be removed from the sequence draft. Save to apply the change.",
+                      confirmLabel: "Remove step",
+                    });
+                    if (!confirmed) return;
+                    setSequenceSteps((prev) => prev.filter((_, stepIndex) => stepIndex !== index));
+                  }}
                 >
                   Remove step
                 </Button>
@@ -326,6 +334,7 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
           </Button>
         </div>
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

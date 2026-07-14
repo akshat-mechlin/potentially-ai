@@ -1,4 +1,6 @@
 import { fetchGoogleContacts } from "@/lib/integrations/google-contacts";
+import { fetchGoogleCalendarContacts } from "@/lib/integrations/google-calendar";
+import { fetchGmailContacts } from "@/lib/integrations/gmail";
 import { fetchOutlookContacts } from "@/lib/integrations/outlook-contacts";
 import {
   isUnauthorizedProviderResponse,
@@ -8,6 +10,7 @@ import {
 import { getConnectorDefinition } from "@/lib/connectors/registry";
 import { importContactsFromSource } from "@/lib/data/contacts";
 import type { SyncSource } from "@/types";
+import type { ImportedContactRow } from "@/lib/integrations/google-contacts";
 
 type ConnectorAccountRow = {
   id: string;
@@ -21,9 +24,32 @@ type TokenUpdater = (tokens: {
   refreshToken: string | null;
 }) => Promise<void>;
 
+type AdminSyncContext = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any;
+  userId: string;
+  workspaceId: string;
+};
+
+function fetcherForSource(
+  source: SyncSource,
+): (accessToken: string) => Promise<ImportedContactRow[]> {
+  switch (source) {
+    case "outlook":
+      return fetchOutlookContacts;
+    case "google_calendar":
+      return fetchGoogleCalendarContacts;
+    case "gmail":
+      return fetchGmailContacts;
+    case "google_contacts":
+    default:
+      return fetchGoogleContacts;
+  }
+}
+
 async function withFreshAccessToken(
   account: ConnectorAccountRow,
-  fetchContacts: (accessToken: string) => Promise<Awaited<ReturnType<typeof fetchGoogleContacts>>>,
+  fetchContacts: (accessToken: string) => Promise<ImportedContactRow[]>,
   onTokensUpdated?: TokenUpdater,
 ) {
   if (!account.access_token) {
@@ -48,7 +74,7 @@ async function withFreshAccessToken(
         : new Error("Provider request failed. Reconnect this account from Connectors.");
     }
 
-    const def = getConnectorDefinition(account.connector_key as "google_contacts" | "outlook");
+    const def = getConnectorDefinition(account.connector_key);
     const provider = def?.oauth?.supabaseProvider;
 
     const refreshed =
@@ -71,18 +97,30 @@ export async function syncConnectorAccount(
   account: ConnectorAccountRow,
   source: SyncSource,
   onTokensUpdated?: TokenUpdater,
+  asAdmin?: AdminSyncContext,
 ) {
   if (!account.access_token) {
     throw new Error("This account is missing an access token. Reconnect it.");
   }
 
-  const rows = await withFreshAccessToken(
-    account,
-    source === "outlook" ? fetchOutlookContacts : fetchGoogleContacts,
-    onTokensUpdated,
-  );
+  if (source === "csv") {
+    throw new Error("Use the Import button for CSV files.");
+  }
 
-  const result = await importContactsFromSource(rows, source);
+  const rows = await withFreshAccessToken(account, fetcherForSource(source), onTokensUpdated);
+  const result = await importContactsFromSource(
+    rows,
+    source,
+    asAdmin
+      ? {
+          asAdmin: {
+            supabase: asAdmin.supabase,
+            userId: asAdmin.userId,
+            workspaceId: asAdmin.workspaceId,
+          },
+        }
+      : undefined,
+  );
 
   return {
     imported: result.imported,

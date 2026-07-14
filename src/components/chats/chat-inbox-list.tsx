@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MobileSearchBar } from "@/components/mobile/native-ui";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { cn, formatRelativeTime, getInitials } from "@/lib/utils";
 import type { ChatInboxItem } from "@/types/chats";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ export function ChatInboxList({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMobileApp } = useMobileApp();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = chats.filter((chat) => {
@@ -58,13 +60,13 @@ export function ChatInboxList({
   });
 
   const deleteChat = async (runContactId: string) => {
-    if (
-      !window.confirm(
-        "Delete this conversation from your inbox? The other person will still see it.",
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete this conversation?",
+      description:
+        "It will be removed from your inbox. The other person will still see the conversation.",
+      confirmLabel: "Delete conversation",
+    });
+    if (!confirmed) return;
 
     setDeletingId(runContactId);
     try {
@@ -202,6 +204,7 @@ export function ChatInboxList({
           </ul>
         )}
       </ScrollArea>
+      {confirmDialog}
     </div>
   );
 }

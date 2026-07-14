@@ -40,6 +40,7 @@ function LoginFormContent() {
   const searchParams = useSearchParams();
   const invite = searchParams.get("invite");
   const authError = searchParams.get("error");
+  const authErrorDescription = searchParams.get("error_description");
   const verified = searchParams.get("verified");
   const [loading, setLoading] = useState(false);
 
@@ -49,9 +50,14 @@ function LoginFormContent() {
       return;
     }
     if (authError === "auth") {
-      toast.error("Sign-in failed. Check your credentials or try again.");
+      toast.error(
+        authErrorDescription
+          ? decodeURIComponent(authErrorDescription.replace(/\+/g, " "))
+          : "Sign-in failed. Check your credentials or try again.",
+        { duration: 12_000 },
+      );
     }
-  }, [authError, verified]);
+  }, [authError, authErrorDescription, verified]);
 
   const {
     register,
@@ -117,9 +123,23 @@ function LoginFormContent() {
       ? `${origin}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
       : `${origin}/api/auth/callback?next=/dashboard`;
 
+    // Always show the account picker (don't silently reuse the last session).
+    // Azure must request `email` or Supabase fails with "Error getting user email…".
+    const queryParams: Record<string, string> =
+      provider === "google"
+        ? { prompt: "select_account", access_type: "offline" }
+        : { prompt: "select_account" };
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo },
+      options: {
+        redirectTo,
+        queryParams,
+        scopes:
+          provider === "google"
+            ? "openid email profile"
+            : "openid email profile offline_access",
+      },
     });
     if (error) throw error;
   };

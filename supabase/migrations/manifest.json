@@ -166,5 +166,11 @@
     "name": "chat_delete",
     "file": "20260710180000_chat_delete.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260714120000",
+    "name": "connector_auto_sync",
+    "file": "20260714120000_connector_auto_sync.sql",
+    "remote": "applied"
   }
 ]

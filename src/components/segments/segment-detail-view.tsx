@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { contactHref } from "@/lib/routes/contacts";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import type { Contact } from "@/types";
 import type { Segment } from "@/types/playbooks";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ type SegmentDetailResponse = {
 export function SegmentDetailView({ segmentId }: { segmentId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [contactSearch, setContactSearch] = useState("");
@@ -97,7 +99,12 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this segment? Contacts stay in your network.")) return;
+    const confirmed = await confirm({
+      title: "Delete this segment?",
+      description: "Contacts stay in your network. Only this segment grouping will be removed.",
+      confirmLabel: "Delete segment",
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/segments/${segmentId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
@@ -110,6 +117,12 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
   };
 
   const handleRemoveContact = async (contactId: string) => {
+    const confirmed = await confirm({
+      title: "Remove from segment?",
+      description: "This contact stays in your network, but will no longer be part of this segment.",
+      confirmLabel: "Remove",
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/segments/${segmentId}/contacts`, {
         method: "DELETE",
@@ -439,6 +452,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
       </DesktopOnly>
 
       {addSheet}
+      {confirmDialog}
     </>
   );
 }

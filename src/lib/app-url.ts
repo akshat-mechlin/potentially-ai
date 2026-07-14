@@ -5,19 +5,46 @@ export function isLocalHost(value: string) {
 }
 
 /**
- * Browser origin for OAuth redirectTo.
- * Prefer the live non-localhost location; otherwise NEXT_PUBLIC_APP_URL when it is public
- * (so Cloudflare tunnel / mis-reported Host never returns users to localhost).
+ * Browser origin for OAuth redirectTo — always the host the user is currently on
+ * (localhost when developing locally, production when on potentially.mechlintech.com).
  */
 export function getClientAppOrigin() {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
-
   if (typeof window !== "undefined") {
-    const origin = window.location.origin;
-    if (!isLocalHost(origin)) return origin;
-    if (configured && !isLocalHost(configured)) return configured;
-    return origin;
+    return window.location.origin;
+  }
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "") || "http://localhost:1020";
+}
+
+/**
+ * Server origin after OAuth callback — match the host that received the callback.
+ * Uses x-forwarded-host when present (Cloudflare tunnel → production domain),
+ * otherwise the direct Host header (including localhost for local login).
+ */
+export function resolveOAuthReturnOrigin(request: Request): string {
+  const forwardedHost =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("cf-connecting-host")?.trim() ??
+    null;
+  const forwardedProto =
+    request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? null;
+
+  if (forwardedHost && !isLocalHost(forwardedHost)) {
+    return `${forwardedProto ?? "https"}://${forwardedHost}`.replace(/\/$/, "");
   }
 
-  return configured || "http://localhost:1020";
+  const host = request.headers.get("host")?.trim();
+  if (host) {
+    const proto = isLocalHost(host) ? "http" : (forwardedProto ?? "https");
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+
+  try {
+    return new URL(request.url).origin;
+  } catch {
+    return (
+      (process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:1020")
+        .trim()
+        .replace(/\/$/, "")
+    );
+  }
 }

@@ -77,7 +77,10 @@ export function formatOAuthError(error: unknown, connectorKey?: ConnectorKey): s
     normalized.includes("identity is already linked") ||
     normalized.includes("identity_already_exists")
   ) {
-    return `${providerLabel} is already linked to this user. Click Connect again — we'll re-prompt for Contacts permission so tokens can be saved.`;
+    if (normalized.includes("another user")) {
+      return `${providerLabel} is already linked to a different Potentially user. Pick a different account, or sign in with that ${providerLabel} account instead.`;
+    }
+    return `${providerLabel} is already linked to this user. Click Connect again — we'll re-prompt for access so tokens can be saved.`;
   }
 
   return message;

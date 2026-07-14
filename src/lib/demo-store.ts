@@ -52,7 +52,25 @@ let syncJobs: Array<{
 }> = [];
 
 export function getDemoContacts(): Contact[] {
-  return [...DEMO_CONTACTS, ...extraContacts];
+  return [...DEMO_CONTACTS, ...extraContacts].map((contact) => {
+    if (!demoExcludedOverrides.has(contact.id)) return contact;
+    const excluded = demoExcludedOverrides.get(contact.id)!;
+    return {
+      ...contact,
+      metadata: {
+        ...(contact.metadata ?? {}),
+        excluded,
+        excluded_at: excluded ? new Date().toISOString() : null,
+      },
+    };
+  });
+}
+
+const demoExcludedOverrides = new Map<string, boolean>();
+
+export function setDemoContactsExcluded(ids: string[], excluded: boolean) {
+  for (const id of ids) demoExcludedOverrides.set(id, excluded);
+  return { updated: ids.length };
 }
 
 export function getDemoContactById(id: string): Contact | undefined {

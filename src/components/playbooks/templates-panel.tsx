@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DesktopOnly } from "@/components/mobile/primitives";
 import { useIsClient } from "@/hooks/use-is-client";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn } from "@/lib/utils";
 import type { EmailTemplate } from "@/types/playbooks";
@@ -61,12 +62,30 @@ export function TemplatesPanel() {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const { data: templatesData } = useQuery<{ templates: EmailTemplate[] }>({
     queryKey: ["email-templates"],
     queryFn: () => fetch("/api/email-templates").then((r) => r.json()),
     enabled: mounted,
   });
+
+  const deleteTemplate = async (template: EmailTemplate) => {
+    const confirmed = await confirm({
+      title: "Delete this template?",
+      description: `“${template.name}” will be permanently deleted.`,
+      confirmLabel: "Delete template",
+    });
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/email-templates?id=${template.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed");
+      toast.success("Template deleted");
+      queryClient.invalidateQueries({ queryKey: ["email-templates"] });
+    } catch {
+      toast.error("Failed to delete template");
+    }
+  };
 
   return (
     <Card className={cn(isMobileApp && "mobile-card-flat border-0 shadow-none")}>
@@ -94,10 +113,8 @@ export function TemplatesPanel() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={async () => {
-                await fetch(`/api/email-templates?id=${template.id}`, { method: "DELETE" });
-                queryClient.invalidateQueries({ queryKey: ["email-templates"] });
-              }}
+              className="text-destructive hover:text-destructive"
+              onClick={() => void deleteTemplate(template)}
             >
               Delete
             </Button>
@@ -110,6 +127,7 @@ export function TemplatesPanel() {
           onCreated={() => queryClient.invalidateQueries({ queryKey: ["email-templates"] })}
         />
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

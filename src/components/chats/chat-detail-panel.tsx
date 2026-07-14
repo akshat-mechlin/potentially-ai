@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsClient } from "@/hooks/use-is-client";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import type { ChatDetail } from "@/types/chats";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ function statusLabel(status: string) {
 
 export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDetailPanelProps) {
   const mounted = useIsClient();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const { isMobileApp } = useMobileApp();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -44,13 +46,13 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
   });
 
   const deleteConversation = async () => {
-    if (
-      !window.confirm(
-        "Delete this conversation from your inbox? The other person will still see it.",
-      )
-    ) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete this conversation?",
+      description:
+        "It will be removed from your inbox. The other person will still see the conversation.",
+      confirmLabel: "Delete conversation",
+    });
+    if (!confirmed) return;
 
     setDeleting(true);
     try {
@@ -235,6 +237,7 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
           </TabsContent>
         </Tabs>
       </div>
+      {confirmDialog}
     </div>
   );
 }

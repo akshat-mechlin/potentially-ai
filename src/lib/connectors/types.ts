@@ -44,7 +44,7 @@ export interface ConnectorDefinition {
     supabaseProvider: string;
     scopes: string;
   };
-  syncSource?: "google_contacts" | "outlook" | "csv";
+  syncSource?: "google_contacts" | "google_calendar" | "gmail" | "outlook" | "csv";
 }
 
 export interface ConnectorAccount {
@@ -54,6 +54,10 @@ export interface ConnectorAccount {
   status: ConnectorStatus;
   recordsCount: number;
   lastSync: string;
+  /** CSV import batch id for filtering contacts belonging to this account/file. */
+  importBatchId?: string | null;
+  /** User opted into daily automatic sync for this account. */
+  autoSyncEnabled?: boolean;
 }
 
 export interface ConnectorState {
@@ -75,6 +79,8 @@ export interface ConnectorState {
   canConnect: boolean;
   canSync: boolean;
   supportsMultipleAccounts: boolean;
+  /** True when every linked account has auto-sync enabled. */
+  autoSyncEnabled: boolean;
 }
 
 export const CONNECTOR_CATEGORY_ORDER: ConnectorCategory[] = [

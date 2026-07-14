@@ -1,6 +1,6 @@
 import type { ConnectorDefinition } from "./types";
 
-/** Only Google Contacts (+ CSV custom_data) are connectable for now; others are coming_soon. */
+/** Google Contacts/Calendar/Gmail + Outlook Contacts (+ CSV) are connectable; others coming_soon. */
 export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
   {
     key: "google_contacts",
@@ -22,34 +22,36 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
   {
     key: "google_calendar",
     name: "Google Calendar",
-    description: "Sync meetings and relationship touchpoints from Calendar.",
+    description: "Import people from meetings you attend or organize.",
     category: "google",
     categoryLabel: "Google",
     brandColor: "#34A853",
     brandInitial: "G",
     capabilities: ["calendar"],
-    availability: "coming_soon",
+    availability: "live",
     oauth: {
       supabaseProvider: "google",
       scopes:
         "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
     },
+    syncSource: "google_calendar",
   },
   {
     key: "gmail",
     name: "Gmail",
-    description: "Analyze email relationships and interaction history.",
+    description: "Import people from recent email From/To/Cc addresses.",
     category: "google",
     categoryLabel: "Google",
     brandColor: "#EA4335",
     brandInitial: "M",
     capabilities: ["email", "contacts"],
-    availability: "coming_soon",
+    availability: "live",
     oauth: {
       supabaseProvider: "google",
       scopes:
         "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email",
     },
+    syncSource: "gmail",
   },
   {
     key: "google_drive",
@@ -74,8 +76,8 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     categoryLabel: "Microsoft",
     brandColor: "#0078D4",
     brandInitial: "O",
-    capabilities: ["contacts", "email"],
-    availability: "coming_soon",
+    capabilities: ["contacts"],
+    availability: "live",
     oauth: {
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access Contacts.Read",

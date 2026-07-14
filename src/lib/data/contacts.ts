@@ -7,7 +7,14 @@ import {
 } from "@/lib/demo-store";
 import { buildContactEmbedding } from "@/lib/data/embeddings";
 import { getUserWorkspaceContext, listUserWorkspaces } from "@/lib/data/workspace";
+import {
+  isContactExcluded,
+  type ContactExcludedStatus,
+} from "@/lib/contacts/exclude";
 import type { Contact } from "@/types";
+
+export type { ContactExcludedStatus };
+export { isContactExcluded };
 
 type SearchContactMatch = {
   id: string;
@@ -74,7 +81,66 @@ type ListContactsOptions = {
   limit?: number;
   offset?: number;
   q?: string;
+  source?: string;
+  importBatchId?: string;
+  /** Default `active` hides excluded contacts from network lists. */
+  excludedStatus?: ContactExcludedStatus;
+  hasEmail?: boolean;
+  hasCompany?: boolean;
+  hasTitle?: boolean;
 };
+
+function applyContactFieldFilters(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase filter builder chain
+  query: any,
+  options: Pick<
+    ListContactsOptions,
+    "excludedStatus" | "hasEmail" | "hasCompany" | "hasTitle"
+  >,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any {
+  const excludedStatus = options.excludedStatus ?? "active";
+  if (excludedStatus === "excluded") {
+    query = query.contains("metadata", { excluded: true });
+  } else if (excludedStatus === "active") {
+    query = query.or("metadata->>excluded.is.null,metadata->>excluded.eq.false");
+  }
+
+  if (options.hasEmail === true) {
+    query = query.not("email", "is", null).neq("email", "");
+  }
+  if (options.hasCompany === true) {
+    query = query.not("company_name", "is", null).neq("company_name", "");
+  }
+  if (options.hasTitle === true) {
+    query = query.not("title", "is", null).neq("title", "");
+  }
+
+  return query;
+}
+
+function matchesClientFilters(
+  contact: Contact,
+  options: Pick<
+    ListContactsOptions,
+    "excludedStatus" | "hasEmail" | "hasCompany" | "hasTitle" | "source" | "importBatchId"
+  >,
+) {
+  const excludedStatus = options.excludedStatus ?? "active";
+  const excluded = isContactExcluded(contact);
+  if (excludedStatus === "active" && excluded) return false;
+  if (excludedStatus === "excluded" && !excluded) return false;
+
+  if (options.source && contact.source !== options.source) return false;
+  if (options.importBatchId) {
+    const batch = (contact.metadata as { import_batch_id?: string } | null)?.import_batch_id;
+    if (batch !== options.importBatchId) return false;
+  }
+  if (options.hasEmail === true && !contact.email?.trim()) return false;
+  if (options.hasCompany === true && !contact.company_name?.trim()) return false;
+  if (options.hasTitle === true && !contact.title?.trim()) return false;
+  return true;
+}
 
 function sanitizeSearchTerm(q: string) {
   return q.trim().replace(/[%_,]/g, "");
@@ -96,10 +162,28 @@ export async function countContacts(
     typeof allGroupsOrOptions === "boolean"
       ? { allGroups: allGroupsOrOptions }
       : allGroupsOrOptions;
-  const { allGroups = true, q } = options;
+  const {
+    allGroups = true,
+    q,
+    source,
+    importBatchId,
+    excludedStatus,
+    hasEmail,
+    hasCompany,
+    hasTitle,
+  } = options;
 
   if (isDataDemoMode()) {
-    const contacts = getDemoContacts();
+    const contacts = getDemoContacts().filter((contact) =>
+      matchesClientFilters(contact, {
+        source,
+        importBatchId,
+        excludedStatus,
+        hasEmail,
+        hasCompany,
+        hasTitle,
+      }),
+    );
     if (!q?.trim()) return contacts.length;
     return filterContactsByQuery(q, contacts).length;
   }
@@ -120,6 +204,15 @@ export async function countContacts(
     .select("*", { count: "exact", head: true })
     .in("workspace_id", workspaceIds);
 
+  if (source) query = query.eq("source", source);
+  if (importBatchId) query = query.contains("metadata", { import_batch_id: importBatchId });
+  query = applyContactFieldFilters(query, {
+    excludedStatus,
+    hasEmail,
+    hasCompany,
+    hasTitle,
+  });
+
   query = applyContactSearch(query, q);
 
   const { count, error } = await query;
@@ -135,10 +228,30 @@ export async function listContacts(
     typeof allGroupsOrOptions === "boolean"
       ? { allGroups: allGroupsOrOptions }
       : allGroupsOrOptions;
-  const { allGroups = true, limit, offset = 0, q } = options;
+  const {
+    allGroups = true,
+    limit,
+    offset = 0,
+    q,
+    source,
+    importBatchId,
+    excludedStatus,
+    hasEmail,
+    hasCompany,
+    hasTitle,
+  } = options;
 
   if (isDataDemoMode()) {
-    let contacts = getDemoContacts();
+    let contacts = getDemoContacts().filter((contact) =>
+      matchesClientFilters(contact, {
+        source,
+        importBatchId,
+        excludedStatus,
+        hasEmail,
+        hasCompany,
+        hasTitle,
+      }),
+    );
     if (q?.trim()) {
       contacts = filterContactsByQuery(q, contacts);
     }
@@ -163,6 +276,15 @@ export async function listContacts(
     .in("workspace_id", workspaceIds)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false });
+
+  if (source) query = query.eq("source", source);
+  if (importBatchId) query = query.contains("metadata", { import_batch_id: importBatchId });
+  query = applyContactFieldFilters(query, {
+    excludedStatus,
+    hasEmail,
+    hasCompany,
+    hasTitle,
+  });
 
   query = applyContactSearch(query, q);
 
@@ -352,6 +474,13 @@ type ImportOptions = {
   importBatchId?: string;
   fileName?: string;
   sheetName?: string;
+  /** Used by cron / service-role syncs without a user session. */
+  asAdmin?: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase: any;
+    userId: string;
+    workspaceId: string;
+  };
 };
 
 type ImportRow = {
@@ -378,6 +507,14 @@ function rowMetadata(row: ImportRow, base: Record<string, unknown>) {
   };
 }
 
+function preserveExclusionFlags(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata || metadata.excluded !== true) return {};
+  return {
+    excluded: true,
+    excluded_at: metadata.excluded_at ?? null,
+  };
+}
+
 function rowDbFields(row: ImportRow) {
   return {
     full_name: row.full_name,
@@ -401,8 +538,12 @@ export async function importContactsFromSource(
 ) {
   if (isDataDemoMode()) return importDemoContacts(rows);
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  const adminContext = options?.asAdmin;
+  const sessionContext = adminContext ? null : await getUserWorkspaceContext();
+  const supabase = adminContext?.supabase ?? sessionContext?.supabase;
+  const userId = adminContext?.userId ?? sessionContext?.user?.id;
+  const workspaceId = adminContext?.workspaceId ?? sessionContext?.workspaceId;
+  if (!supabase || !userId || !workspaceId) throw new Error("Unauthorized");
 
   const skipEmbeddings = options?.skipEmbeddings === true || source === "csv";
   const importBatchId = options?.importBatchId;
@@ -417,7 +558,7 @@ export async function importContactsFromSource(
       rows,
       source,
       workspaceId,
-      ownerId: user.id,
+      ownerId: userId,
       metadata: metadataBase,
     });
   }
@@ -433,7 +574,7 @@ export async function importContactsFromSource(
     if (row.external_id) {
       const { data: existing } = await supabase
         .from("contacts")
-        .select("id")
+        .select("id, metadata")
         .eq("workspace_id", workspaceId)
         .eq("external_id", row.external_id)
         .maybeSingle();
@@ -445,7 +586,11 @@ export async function importContactsFromSource(
             ...fields,
             embedding,
             source,
-            metadata,
+            metadata: {
+              ...((existing.metadata as Record<string, unknown> | null) ?? {}),
+              ...metadata,
+              ...preserveExclusionFlags(existing.metadata as Record<string, unknown> | null),
+            },
           })
           .eq("id", existing.id);
         updated += 1;
@@ -454,7 +599,7 @@ export async function importContactsFromSource(
     } else if (row.email) {
       const { data: existing } = await supabase
         .from("contacts")
-        .select("id")
+        .select("id, metadata")
         .eq("workspace_id", workspaceId)
         .eq("email", row.email)
         .maybeSingle();
@@ -466,7 +611,11 @@ export async function importContactsFromSource(
             ...fields,
             embedding,
             source,
-            metadata,
+            metadata: {
+              ...(existing.metadata ?? {}),
+              ...metadata,
+              ...preserveExclusionFlags(existing.metadata as Record<string, unknown> | null),
+            },
           })
           .eq("id", existing.id);
         updated += 1;
@@ -477,7 +626,7 @@ export async function importContactsFromSource(
     const { error } = await supabase.from("contacts").insert({
       ...fields,
       workspace_id: workspaceId,
-      owner_id: user.id,
+      owner_id: userId,
       source,
       tags: ["imported"],
       embedding,
@@ -603,4 +752,42 @@ export async function saveSearchHistory(
     query,
     result,
   });
+}
+
+/** Mark contacts as excluded (hidden from the network) or restore them. */
+export async function setContactsExcluded(ids: string[], excluded: boolean) {
+  const uniqueIds = [...new Set(ids)].filter(Boolean);
+  if (!uniqueIds.length) return { updated: 0 };
+
+  if (isDataDemoMode()) {
+    const { setDemoContactsExcluded } = await import("@/lib/demo-store");
+    return setDemoContactsExcluded(uniqueIds, excluded);
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  const contacts = await getContactsByIds(uniqueIds);
+  if (!contacts.length) return { updated: 0 };
+
+  const now = new Date().toISOString();
+  let updated = 0;
+
+  await Promise.all(
+    contacts.map(async (contact) => {
+      const metadata = {
+        ...(contact.metadata ?? {}),
+        excluded,
+        excluded_at: excluded ? now : null,
+      };
+      const { error } = await supabase
+        .from("contacts")
+        .update({ metadata, updated_at: now })
+        .eq("id", contact.id);
+      if (error) throw error;
+      updated += 1;
+    }),
+  );
+
+  return { updated };
 }

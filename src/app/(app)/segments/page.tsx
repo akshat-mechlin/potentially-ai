@@ -14,6 +14,7 @@ import {
 } from "@/components/mobile/primitives";
 import { MobileLargeTitle, MobileListSection, MobileListTile } from "@/components/mobile/native-ui";
 import { useIsClient } from "@/hooks/use-is-client";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export default function SegmentsPage() {
   const { enabled, loading: flagsLoading } = usePlaybookEnabled();
   const { isMobile } = useMobileApp();
   const queryClient = useQueryClient();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -78,7 +80,12 @@ export default function SegmentsPage() {
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
-    if (!confirm("Delete this segment?")) return;
+    const confirmed = await confirm({
+      title: "Delete this segment?",
+      description: "Contacts stay in your network. Only this segment grouping will be removed.",
+      confirmLabel: "Delete segment",
+    });
+    if (!confirmed) return;
     try {
       const res = await fetch(`/api/segments/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
@@ -209,6 +216,7 @@ export default function SegmentsPage() {
       </DesktopOnly>
 
       {createDialog}
+      {confirmDialog}
     </>
   );
 }
