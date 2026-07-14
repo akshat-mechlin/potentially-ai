@@ -4,6 +4,7 @@ import type { ConnectorKey } from "@/lib/connectors/types";
 import { saveConnectorFromSession, syncConnector } from "@/lib/data/connectors";
 import { joinWorkspaceFromInviteToken } from "@/lib/data/workspace-team";
 import { PENDING_CONNECTOR_COOKIE } from "@/lib/oauth/scopes";
+import { resolveAppUrl } from "@/lib/supabase/admin";
 import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 function resolveConnectorKey(request: NextRequest): ConnectorKey | null {
@@ -53,7 +54,8 @@ export async function GET(request: NextRequest) {
   let dest = rawNext && rawNext.startsWith("/") ? rawNext : "/dashboard";
   if (connectorKey) dest = "/connectors";
 
-  const origin = request.nextUrl.origin;
+  // Prefer APP_URL / public host over request.nextUrl.origin (often localhost behind tunnel).
+  const origin = resolveAppUrl(request);
 
   // Supabase returns error=* here when linkIdentity hits identity_already_exists, etc.
   // Previously we ignored this and silently bounced to /login — no toast, no sync.

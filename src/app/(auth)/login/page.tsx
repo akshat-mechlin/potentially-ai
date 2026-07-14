@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
+import { getClientAppOrigin } from "@/lib/app-url";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
 import { Button } from "@/components/ui/button";
@@ -110,10 +111,11 @@ function LoginFormContent() {
       return;
     }
 
+    const origin = getClientAppOrigin();
     const supabase = createClient();
     const redirectTo = invite
-      ? `${window.location.origin}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
-      : `${window.location.origin}/api/auth/callback?next=/dashboard`;
+      ? `${origin}/api/auth/callback?next=/groups&invite=${encodeURIComponent(invite)}`
+      : `${origin}/api/auth/callback?next=/dashboard`;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
