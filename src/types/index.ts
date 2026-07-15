@@ -3,7 +3,13 @@ export type OAuthProvider = "google" | "microsoft" | "outlook";
 export type ConnectionStatus = "active" | "expired" | "revoked" | "pending";
 export type IntroductionStatus = "draft" | "requested" | "accepted" | "declined" | "completed";
 export type SyncJobStatus = "pending" | "running" | "completed" | "failed";
-export type SyncSource = "google_contacts" | "google_calendar" | "gmail" | "outlook" | "csv";
+export type SyncSource =
+  | "google_contacts"
+  | "google_calendar"
+  | "gmail"
+  | "outlook"
+  | "outlook_mail"
+  | "csv";
 export type RelationshipEventType =
   | "email"
   | "meeting"
@@ -19,6 +25,9 @@ export interface Profile {
   bio: string | null;
   title: string | null;
   linkedin_url: string | null;
+  company: string | null;
+  location: string | null;
+  website_url: string | null;
   is_admin: boolean;
   created_at: string;
   updated_at: string;

@@ -249,7 +249,9 @@ export function EmailSenderSettings({ compact = false }: EmailSenderSettingsProp
   const customFields = mode === "custom" && (
     <div className="space-y-4 rounded-xl border border-dashed p-4">
       <div className="space-y-2">
-        <Label htmlFor="custom-sender-name">Sender name</Label>
+        <Label htmlFor="custom-sender-name" required>
+          Sender name
+        </Label>
         <Input
           id="custom-sender-name"
           placeholder="e.g. Akshat Pareek"
@@ -259,7 +261,9 @@ export function EmailSenderSettings({ compact = false }: EmailSenderSettingsProp
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="custom-sender-email">Sender email</Label>
+        <Label htmlFor="custom-sender-email" required>
+          Sender email
+        </Label>
         <Input
           id="custom-sender-email"
           type="email"

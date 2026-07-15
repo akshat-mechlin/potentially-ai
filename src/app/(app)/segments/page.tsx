@@ -114,7 +114,7 @@ export default function SegmentsPage() {
         </DialogHeader>
         <div className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label required>Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Fintech CTOs" />
           </div>
           <DesktopOnly>

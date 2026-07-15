@@ -116,7 +116,9 @@ export function WorkspaceInviteModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="workspace-invite-emails">Invite by email</Label>
+            <Label htmlFor="workspace-invite-emails" required>
+              Invite by email
+            </Label>
             <Input
               id="workspace-invite-emails"
               value={emails}

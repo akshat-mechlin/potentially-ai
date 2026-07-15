@@ -9,7 +9,9 @@ import type { OAuthProvider, SyncSource } from "@/types";
 type ServerSupabase = Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>;
 
 function toDbProvider(provider: ConnectorKey): OAuthProvider {
-  if (provider === "outlook" || provider === "outlook_calendar") return "outlook";
+  if (provider === "outlook" || provider === "outlook_mail" || provider === "outlook_calendar") {
+    return "outlook";
+  }
   return "google";
 }
 
@@ -42,7 +44,9 @@ export async function saveConnectionFromSession(
   }
 
   const identity = session.user.identities?.find((item) =>
-    connectProvider === "outlook" || connectProvider === "outlook_calendar"
+    connectProvider === "outlook" ||
+    connectProvider === "outlook_mail" ||
+    connectProvider === "outlook_calendar"
       ? item.provider === "azure"
       : item.provider === "google",
   );

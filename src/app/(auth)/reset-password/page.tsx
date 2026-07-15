@@ -83,14 +83,18 @@ export default function ResetPasswordPage() {
         <CardContent className="p-0 pt-6">
           <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
+              <Label htmlFor="password" required>
+                New password
+              </Label>
               <Input id="password" type="password" {...register("password")} />
               {errors.password && (
                 <p className="text-xs text-destructive">{errors.password.message}</p>
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm password</Label>
+              <Label htmlFor="confirmPassword" required>
+                Confirm password
+              </Label>
               <Input id="confirmPassword" type="password" {...register("confirmPassword")} />
               {errors.confirmPassword && (
                 <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>

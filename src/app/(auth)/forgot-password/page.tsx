@@ -58,7 +58,9 @@ export default function ForgotPasswordPage() {
         <CardContent className="p-0 pt-6">
           <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" required>
+                Email
+              </Label>
               <Input id="email" type="email" {...register("email")} />
             </div>
             <Button type="submit" className="w-full">

@@ -45,13 +45,39 @@ export async function listWorkspaceMembers(workspaceId?: string | null): Promise
     email: string;
     role: string;
     connections_count: number;
+    avatar_url: string | null;
+    title: string | null;
   }>
 > {
   if (isDataDemoMode()) {
     return [
-      { id: "demo-user-001", name: "Alex Morgan", email: "alex@acme.com", role: "Owner", connections_count: 342 },
-      { id: "demo-user-002", name: "Jordan Lee", email: "jordan@acme.com", role: "Admin", connections_count: 156 },
-      { id: "demo-user-003", name: "Sam Taylor", email: "sam@acme.com", role: "Member", connections_count: 89 },
+      {
+        id: "demo-user-001",
+        name: "Alex Morgan",
+        email: "alex@acme.com",
+        role: "Owner",
+        connections_count: 342,
+        avatar_url: null,
+        title: "CEO",
+      },
+      {
+        id: "demo-user-002",
+        name: "Jordan Lee",
+        email: "jordan@acme.com",
+        role: "Admin",
+        connections_count: 156,
+        avatar_url: null,
+        title: "Partnerships",
+      },
+      {
+        id: "demo-user-003",
+        name: "Sam Taylor",
+        email: "sam@acme.com",
+        role: "Member",
+        connections_count: 89,
+        avatar_url: null,
+        title: null,
+      },
     ];
   }
 
@@ -64,7 +90,9 @@ export async function listWorkspaceMembers(workspaceId?: string | null): Promise
 
   const { data, error } = await supabase
     .from("workspace_members")
-    .select("role, user_id, profile:profiles!workspace_members_user_id_fkey(name, email)")
+    .select(
+      "role, user_id, profile:profiles!workspace_members_user_id_fkey(name, email, avatar_url, title)",
+    )
     .eq("workspace_id", targetWorkspaceId);
 
   if (error) throw error;
@@ -81,7 +109,12 @@ export async function listWorkspaceMembers(workspaceId?: string | null): Promise
   }
 
   return (data ?? []).map((row) => {
-    const profile = row.profile as { name?: string; email?: string } | null;
+    const profile = row.profile as {
+      name?: string;
+      email?: string;
+      avatar_url?: string | null;
+      title?: string | null;
+    } | null;
     const userId = row.user_id as string;
     return {
       id: userId,
@@ -89,6 +122,8 @@ export async function listWorkspaceMembers(workspaceId?: string | null): Promise
       email: profile?.email || "",
       role: capitalizeRole(row.role as string),
       connections_count: connectionsByOwner.get(userId) ?? 0,
+      avatar_url: profile?.avatar_url ?? null,
+      title: profile?.title ?? null,
     };
   });
 }
@@ -506,7 +541,7 @@ function normalizeSource(source: string) {
     google_calendar: "google_calendar",
     gmail: "gmail",
     outlook: "outlook",
-    outlook_mail: "outlook",
+    outlook_mail: "outlook_mail",
     csv: "csv",
     csv_import: "csv",
   };

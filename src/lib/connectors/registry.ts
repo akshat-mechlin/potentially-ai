@@ -80,9 +80,25 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     availability: "live",
     oauth: {
       supabaseProvider: "azure",
-      scopes: "openid profile email offline_access Contacts.Read",
+      scopes: "openid profile email offline_access User.Read Contacts.Read",
     },
     syncSource: "outlook",
+  },
+  {
+    key: "outlook_mail",
+    name: "Outlook Email",
+    description: "Import people from recent Outlook From/To/Cc addresses.",
+    category: "microsoft",
+    categoryLabel: "Microsoft",
+    brandColor: "#0078D4",
+    brandInitial: "M",
+    capabilities: ["email", "contacts"],
+    availability: "live",
+    oauth: {
+      supabaseProvider: "azure",
+      scopes: "openid profile email offline_access User.Read Mail.Read",
+    },
+    syncSource: "outlook_mail",
   },
   {
     key: "outlook_calendar",
@@ -96,7 +112,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     availability: "coming_soon",
     oauth: {
       supabaseProvider: "azure",
-      scopes: "openid profile email offline_access Calendars.Read",
+      scopes: "openid profile email offline_access User.Read Calendars.Read",
     },
   },
   {

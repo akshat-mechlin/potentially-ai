@@ -185,7 +185,8 @@ export async function GET(request: NextRequest) {
         def?.syncSource === "google_contacts" ||
         def?.syncSource === "google_calendar" ||
         def?.syncSource === "gmail" ||
-        def?.syncSource === "outlook"
+        def?.syncSource === "outlook" ||
+        def?.syncSource === "outlook_mail"
       ) {
         try {
           await syncConnector(connectorKey, undefined, supabase);

@@ -254,6 +254,69 @@ function buildListResponse(connectors: ConnectorState[]) {
   };
 }
 
+export async function saveConnectorOAuthTokens(
+  supabase: ServerSupabase,
+  params: {
+    connectorKey: ConnectorKey;
+    userId: string;
+    accessToken: string;
+    refreshToken: string | null;
+    providerAccountId: string;
+    accountEmail: string | null;
+    accountLabel: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  const def = getConnectorDefinition(params.connectorKey);
+  if (!def?.oauth) {
+    throw new Error("This connector does not support OAuth yet.");
+  }
+
+  const { workspaceId } = await getUserWorkspaceContext(supabase);
+  if (!workspaceId) {
+    throw new Error("Could not create or find a workspace for your account");
+  }
+
+  const { data: siblingAutoSync } = await supabase
+    .from("data_connectors")
+    .select("auto_sync_enabled")
+    .eq("user_id", params.userId)
+    .eq("workspace_id", workspaceId)
+    .eq("connector_key", params.connectorKey)
+    .eq("auto_sync_enabled", true)
+    .limit(1)
+    .maybeSingle();
+
+  const { data, error } = await supabase
+    .from("data_connectors")
+    .upsert(
+      {
+        user_id: params.userId,
+        workspace_id: workspaceId,
+        connector_key: params.connectorKey,
+        provider_account_id: params.providerAccountId,
+        account_email: params.accountEmail,
+        account_label: params.accountLabel,
+        access_token: params.accessToken,
+        refresh_token: params.refreshToken,
+        status: "active",
+        auto_sync_enabled: Boolean(siblingAutoSync?.auto_sync_enabled),
+        metadata: {
+          connected_via: "oauth",
+          supabase_provider: def.oauth.supabaseProvider,
+          ...params.metadata,
+        },
+      },
+      { onConflict: "user_id,workspace_id,connector_key,provider_account_id" },
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/** Legacy path: tokens from Supabase Auth session (login/linkIdentity). Prefer direct connector OAuth. */
 export async function saveConnectorFromSession(
   supabase: ServerSupabase,
   connectorKey: ConnectorKey,
@@ -274,13 +337,8 @@ export async function saveConnectorFromSession(
   const accessToken = session.provider_token;
   if (!accessToken) {
     throw new Error(
-      "No provider access token received. In Supabase enable Manual linking, approve all permissions on the consent screen, then try Connect again. If you signed in with this Google/Microsoft account already, pick the same account and allow Contacts access.",
+      "No provider access token received. Approve all permissions on the consent screen, then try Connect again.",
     );
-  }
-
-  const { workspaceId } = await getUserWorkspaceContext(supabase);
-  if (!workspaceId) {
-    throw new Error("Could not create or find a workspace for your account");
   }
 
   const providerIdentities =
@@ -292,45 +350,17 @@ export async function saveConnectorFromSession(
     session.user.email ||
     null;
   const providerAccountId = identity?.id ?? accountEmail ?? `oauth-${Date.now()}`;
-  const accountLabel = accountEmail ?? providerAccountId;
 
-  const { data: siblingAutoSync } = await supabase
-    .from("data_connectors")
-    .select("auto_sync_enabled")
-    .eq("user_id", session.user.id)
-    .eq("workspace_id", workspaceId)
-    .eq("connector_key", connectorKey)
-    .eq("auto_sync_enabled", true)
-    .limit(1)
-    .maybeSingle();
-
-  const { data, error } = await supabase
-    .from("data_connectors")
-    .upsert(
-      {
-        user_id: session.user.id,
-        workspace_id: workspaceId,
-        connector_key: connectorKey,
-        provider_account_id: providerAccountId,
-        account_email: accountEmail,
-        account_label: accountLabel,
-        access_token: accessToken,
-        refresh_token: session.provider_refresh_token ?? null,
-        status: "active",
-        auto_sync_enabled: Boolean(siblingAutoSync?.auto_sync_enabled),
-        metadata: {
-          connected_via: "oauth",
-          supabase_provider: def.oauth.supabaseProvider,
-          identity_id: identity?.id,
-        },
-      },
-      { onConflict: "user_id,workspace_id,connector_key,provider_account_id" },
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return saveConnectorOAuthTokens(supabase, {
+    connectorKey,
+    userId: session.user.id,
+    accessToken,
+    refreshToken: session.provider_refresh_token ?? null,
+    providerAccountId,
+    accountEmail,
+    accountLabel: accountEmail ?? providerAccountId,
+    metadata: { identity_id: identity?.id },
+  });
 }
 
 export async function syncConnector(
@@ -379,7 +409,8 @@ export async function syncConnector(
       def.syncSource === "google_contacts" ||
       def.syncSource === "google_calendar" ||
       def.syncSource === "gmail" ||
-      def.syncSource === "outlook"
+      def.syncSource === "outlook" ||
+      def.syncSource === "outlook_mail"
     ) {
       const result = await syncConnectorAccount(account, def.syncSource, async (tokens) => {
         await supabase
@@ -421,7 +452,8 @@ export async function syncConnector(
     def.syncSource === "google_contacts" ||
     def.syncSource === "google_calendar" ||
     def.syncSource === "gmail" ||
-    def.syncSource === "outlook"
+    def.syncSource === "outlook" ||
+    def.syncSource === "outlook_mail"
   ) {
     return {
       message: `Synced ${totalImported} new and ${totalUpdated} updated records from ${accountLabel}.`,

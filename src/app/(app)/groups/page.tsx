@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Loader2, Cable, ArrowRight, Building2, ChevronRight } from "lucide-react";
+import { GroupLogo } from "@/components/media/group-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,7 +146,7 @@ function GroupsPageContent() {
         </DialogHeader>
         <form method="post" action="" onSubmit={handleSubmit(onCreateGroup)} className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
           <div className="space-y-2">
-            <Label>Group name</Label>
+            <Label required>Group name</Label>
             <Input placeholder="Acme Ventures" {...register("name")} />
             {errors.name && (
               <p className="text-xs text-destructive">{errors.name.message as string}</p>
@@ -166,9 +167,12 @@ function GroupsPageContent() {
       href={`/groups/${workspace.id}`}
       className="group flex items-center gap-3 rounded-lg border border-border/80 px-3 py-3 transition-colors hover:border-primary/40 hover:bg-primary/5"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <Building2 className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-      </span>
+      <GroupLogo
+        name={workspace.name}
+        src={workspace.logo_url}
+        className="h-9 w-9 rounded-lg"
+        iconClassName="h-4 w-4"
+      />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{workspace.name}</p>
         <p className="text-xs text-muted-foreground">

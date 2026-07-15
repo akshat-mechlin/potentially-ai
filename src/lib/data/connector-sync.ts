@@ -2,6 +2,7 @@ import { fetchGoogleContacts } from "@/lib/integrations/google-contacts";
 import { fetchGoogleCalendarContacts } from "@/lib/integrations/google-calendar";
 import { fetchGmailContacts } from "@/lib/integrations/gmail";
 import { fetchOutlookContacts } from "@/lib/integrations/outlook-contacts";
+import { fetchOutlookMailContacts } from "@/lib/integrations/outlook-mail";
 import {
   isUnauthorizedProviderResponse,
   refreshAzureAccessToken,
@@ -37,6 +38,8 @@ function fetcherForSource(
   switch (source) {
     case "outlook":
       return fetchOutlookContacts;
+    case "outlook_mail":
+      return fetchOutlookMailContacts;
     case "google_calendar":
       return fetchGoogleCalendarContacts;
     case "gmail":
@@ -81,7 +84,8 @@ async function withFreshAccessToken(
       provider === "azure"
         ? await refreshAzureAccessToken(
             account.refresh_token,
-            def?.oauth?.scopes ?? "openid profile email offline_access Contacts.Read",
+            def?.oauth?.scopes ??
+              "openid profile email offline_access User.Read Contacts.Read",
           )
         : await refreshGoogleAccessToken(account.refresh_token);
 

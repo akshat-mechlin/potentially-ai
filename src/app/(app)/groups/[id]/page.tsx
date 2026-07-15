@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  Building2,
   Cable,
   Loader2,
   LogOut,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -29,9 +29,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WorkspaceInviteModal } from "@/components/workspace/workspace-invite-modal";
+import { GroupLogo } from "@/components/media/group-logo";
+import { GroupLogoPreviewDialog } from "@/components/media/group-logo-preview-dialog";
+import { AvatarCropDialog } from "@/components/media/avatar-crop-dialog";
+import { UserAvatar } from "@/components/media/user-avatar";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { createClient } from "@/lib/supabase/client";
+import { isDemoMode } from "@/lib/demo-data";
+import { assertImageFile, uploadPublicImage } from "@/lib/storage/media-upload";
 import {
   MobileEmpty,
   MobileFab,
@@ -51,12 +58,19 @@ export default function GroupDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const groupId = params.id;
+  const queryClient = useQueryClient();
   const { refreshWorkspaces, evictWorkspace } = useWorkspaces();
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropObjectUrlRef = useRef<string | null>(null);
 
   const { data: group, isLoading } = useQuery<WorkspaceDetail>({
     queryKey: ["workspace-detail", groupId],
@@ -71,9 +85,59 @@ export default function GroupDetailPage() {
     enabled: mounted && Boolean(groupId),
   });
 
+  useEffect(() => {
+    return () => {
+      if (cropObjectUrlRef.current) URL.revokeObjectURL(cropObjectUrlRef.current);
+    };
+  }, []);
+
   const invalidateAll = async (workspaceId: string) => {
     evictWorkspace(workspaceId);
     await refreshWorkspaces();
+    await queryClient.invalidateQueries({ queryKey: ["workspace-detail", workspaceId] });
+    await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+  };
+
+  const openCropper = (file: File) => {
+    try {
+      assertImageFile(file);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Invalid image");
+      return;
+    }
+    if (cropObjectUrlRef.current) URL.revokeObjectURL(cropObjectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    cropObjectUrlRef.current = url;
+    setCropSrc(url);
+    setCropOpen(true);
+  };
+
+  const handleLogoCropped = async (file: File) => {
+    if (!groupId) return;
+    setLogoUploading(true);
+    try {
+      let logoUrl: string;
+      if (isDemoMode()) {
+        logoUrl = URL.createObjectURL(file);
+      } else {
+        const supabase = createClient();
+        logoUrl = await uploadPublicImage(supabase, "workspace-logos", groupId, file);
+      }
+      const res = await fetch(`/api/workspaces/${groupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_url: logoUrl }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Failed to update group logo");
+      toast.success("Group logo updated");
+      await invalidateAll(groupId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed");
+      throw error;
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   const handleLeave = async () => {
@@ -151,20 +215,31 @@ export default function GroupDetailPage() {
           <p className="text-xs text-muted-foreground">No members yet.</p>
         ) : (
           group.members.map((member) => (
-            <div
+            <Link
               key={member.id}
-              className="flex items-center justify-between rounded-lg border border-border/80 px-3 py-2"
+              href={`/profile/${member.id}`}
+              className="flex items-center justify-between rounded-lg border border-border/80 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-primary/5"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{member.name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {member.connections_count} connection{member.connections_count === 1 ? "" : "s"}
-                </p>
+              <div className="flex min-w-0 items-center gap-3">
+                <UserAvatar
+                  name={member.name}
+                  email={member.email}
+                  src={member.avatar_url}
+                  className="h-9 w-9"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{member.name}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {member.title ? `${member.title} · ` : ""}
+                    {member.connections_count} connection
+                    {member.connections_count === 1 ? "" : "s"}
+                  </p>
+                </div>
               </div>
               <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
                 {member.role}
               </span>
-            </div>
+            </Link>
           ))
         )}
         {group.can_manage && (
@@ -256,6 +331,86 @@ export default function GroupDetailPage() {
     );
   }
 
+  const logoControl = (sizeClass: string) => (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => {
+          if (group.logo_url) setPreviewOpen(true);
+          else if (group.can_manage) fileInputRef.current?.click();
+        }}
+        aria-label={
+          group.logo_url
+            ? "Preview group logo"
+            : group.can_manage
+              ? "Add group logo"
+              : "Group logo"
+        }
+      >
+        <GroupLogo
+          name={group.name}
+          src={group.logo_url}
+          className={`${sizeClass} cursor-pointer rounded-xl`}
+          iconClassName="h-5 w-5"
+        />
+      </button>
+      {group.can_manage ? (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) openCropper(file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={logoUploading}
+            aria-label="Change group logo"
+            className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-muted disabled:opacity-60"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {logoUploading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Pencil className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+
+  const logoDialogs = (
+    <>
+      <AvatarCropDialog
+        open={cropOpen}
+        imageSrc={cropSrc}
+        variant="logo"
+        onOpenChange={(open) => {
+          setCropOpen(open);
+          if (!open && cropObjectUrlRef.current) {
+            URL.revokeObjectURL(cropObjectUrlRef.current);
+            cropObjectUrlRef.current = null;
+            setCropSrc(null);
+          }
+        }}
+        onCropped={handleLogoCropped}
+      />
+      <GroupLogoPreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        src={group.logo_url}
+        name={group.name}
+      />
+    </>
+  );
+
   if (isMobileApp) {
     return (
       <>
@@ -266,11 +421,14 @@ export default function GroupDetailPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
+            {logoControl("h-11 w-11")}
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-lg font-semibold">{group.name}</h1>
               <p className="text-xs text-muted-foreground">
                 {formatRole(group.role)} · {group.plan ?? "free"}
-                {group.joined_at ? ` · Joined ${format(new Date(group.joined_at), "MMM d, yyyy")}` : ""}
+                {group.joined_at
+                  ? ` · Joined ${format(new Date(group.joined_at), "MMM d, yyyy")}`
+                  : ""}
               </p>
             </div>
           </div>
@@ -333,18 +491,23 @@ export default function GroupDetailPage() {
               <MobileEmpty>No members</MobileEmpty>
             ) : (
               group.members.map((member) => (
-                <div key={member.id} className="mobile-list-row">
-                  <span className="mobile-menu-item-icon-muted">
-                    <Users className="h-4 w-4" />
-                  </span>
+                <Link key={member.id} href={`/profile/${member.id}`} className="mobile-list-row">
+                  <UserAvatar
+                    name={member.name}
+                    email={member.email}
+                    src={member.avatar_url}
+                    className="h-9 w-9"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{member.name}</p>
-                    <p className="text-xs text-muted-foreground">{member.connections_count} connections</p>
+                    <p className="text-xs text-muted-foreground">
+                      {member.connections_count} connections
+                    </p>
                   </div>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
                     {member.role}
                   </span>
-                </div>
+                </Link>
               ))
             )}
           </MobileMenuList>
@@ -362,6 +525,8 @@ export default function GroupDetailPage() {
           workspaceId={group.id}
           workspaceName={group.name}
         />
+
+        {logoDialogs}
 
         <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
           <DialogContent>
@@ -413,18 +578,21 @@ export default function GroupDetailPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
+          <div className="flex items-start gap-3">
+            {logoControl("h-12 w-12")}
+            <div>
               <h1 className="text-xl font-semibold">{group.name}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your role: {formatRole(group.role)} · Plan: {group.plan ?? "free"}
+                {group.joined_at
+                  ? ` · Joined ${format(new Date(group.joined_at), "MMM d, yyyy")}`
+                  : ""}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Search across all your groups from the main search page. Use actions below to focus
+                on this group.
+              </p>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your role: {formatRole(group.role)} · Plan: {group.plan ?? "free"}
-              {group.joined_at ? ` · Joined ${format(new Date(group.joined_at), "MMM d, yyyy")}` : ""}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Search across all your groups from the main search page. Use actions below to focus on this group.
-            </p>
           </div>
         </div>
       </div>
@@ -442,6 +610,8 @@ export default function GroupDetailPage() {
         workspaceId={group.id}
         workspaceName={group.name}
       />
+
+      {logoDialogs}
 
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent>

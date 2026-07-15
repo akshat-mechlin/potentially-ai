@@ -4,6 +4,7 @@ export type ConnectorKey =
   | "gmail"
   | "google_drive"
   | "outlook"
+  | "outlook_mail"
   | "outlook_calendar"
   | "linkedin"
   | "facebook"
@@ -44,7 +45,13 @@ export interface ConnectorDefinition {
     supabaseProvider: string;
     scopes: string;
   };
-  syncSource?: "google_contacts" | "google_calendar" | "gmail" | "outlook" | "csv";
+  syncSource?:
+    | "google_contacts"
+    | "google_calendar"
+    | "gmail"
+    | "outlook"
+    | "outlook_mail"
+    | "csv";
 }
 
 export interface ConnectorAccount {

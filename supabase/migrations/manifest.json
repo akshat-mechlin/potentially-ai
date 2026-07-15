@@ -172,5 +172,11 @@
     "name": "connector_auto_sync",
     "file": "20260714120000_connector_auto_sync.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260716120000",
+    "name": "profile_group_images_and_details",
+    "file": "20260716120000_profile_group_images_and_details.sql",
+    "remote": "applied"
   }
 ]

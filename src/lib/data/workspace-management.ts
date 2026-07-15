@@ -22,6 +22,44 @@ function normalizeRole(role: string): WorkspaceRole {
   return "member";
 }
 
+export async function updateWorkspace(
+  workspaceId: string,
+  updates: { name?: string; logo_url?: string | null },
+) {
+  if (isDataDemoMode()) {
+    const demo = getDemoWorkspaceById(workspaceId);
+    if (!demo) throw new Error("Group not found");
+    return {
+      ...demo,
+      name: updates.name ?? demo.name,
+      logo_url: updates.logo_url !== undefined ? updates.logo_url : demo.logo_url,
+    };
+  }
+
+  const detail = await getWorkspaceDetail(workspaceId);
+  if (!detail) throw new Error("Group not found");
+  if (!detail.can_manage) throw new Error("Only owners and admins can update this group.");
+
+  const { supabase } = await getUserWorkspaceContext(undefined, workspaceId);
+  if (!supabase) throw new Error("Unauthorized");
+
+  const payload: { name?: string; logo_url?: string | null; updated_at: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (updates.name !== undefined) payload.name = updates.name.trim();
+  if (updates.logo_url !== undefined) payload.logo_url = updates.logo_url;
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update(payload)
+    .eq("id", workspaceId)
+    .select("id, name, slug, logo_url, plan, created_at, updated_at")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getWorkspaceDetail(workspaceId: string): Promise<WorkspaceDetail | null> {
   if (isDataDemoMode()) {
     const demoWorkspace = getDemoWorkspaceById(workspaceId);

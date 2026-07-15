@@ -58,6 +58,12 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
   const segment = data?.segment;
   const contacts = data?.contacts ?? [];
 
+  const isDirty =
+    !!segment &&
+    (name.trim() !== segment.name ||
+      (description.trim() || null) !== (segment.description?.trim() || null));
+  const canSave = isDirty && name.trim().length > 0 && !saving;
+
   const filteredContacts = useMemo(() => {
     const q = contactSearch.trim().toLowerCase();
     if (!q) return contacts;
@@ -250,7 +256,9 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
           <MobileListSection title="Details">
             <div className="space-y-3 p-4">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Name</Label>
+                <Label className="text-xs text-muted-foreground" required>
+                  Name
+                </Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -269,7 +277,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
               </div>
               <Button
                 onClick={handleSave}
-                disabled={saving}
+                disabled={!canSave}
                 className="h-11 w-full rounded-xl font-semibold"
               >
                 {saving ? "Saving..." : "Save changes"}
@@ -379,7 +387,9 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="segment-name">Name</Label>
+                <Label htmlFor="segment-name" required>
+                  Name
+                </Label>
                 <Input id="segment-name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-2">
@@ -392,7 +402,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
                   placeholder="Who is in this segment and why?"
                 />
               </div>
-              <Button onClick={handleSave} disabled={saving}>
+              <Button onClick={handleSave} disabled={!canSave}>
                 {saving ? "Saving..." : "Save changes"}
               </Button>
             </CardContent>

@@ -196,7 +196,9 @@ function LoginFormContent() {
 
         <AuthForm onSubmit={(event) => void handleSubmit(onSubmit)(event)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" required>
+              Email
+            </Label>
             <Input id="email" type="email" placeholder="you@company.com" {...register("email")} />
             {errors.email && (
               <p className="text-xs text-destructive">{errors.email.message}</p>
@@ -204,7 +206,9 @@ function LoginFormContent() {
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" required>
+                Password
+              </Label>
               <Link href="/forgot-password" className="text-xs text-primary hover:underline">
                 Forgot password?
               </Link>

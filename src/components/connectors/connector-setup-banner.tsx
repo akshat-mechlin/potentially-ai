@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { AlertCircle, ExternalLink } from "lucide-react";
 import { getSupabaseProvidersUrl } from "@/lib/oauth/errors";
+import { getConnectorOAuthCallbackAllowlistUrls } from "@/lib/oauth/connector-oauth";
 import { getOAuthCallbackAllowlistUrls } from "@/lib/oauth/scopes";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function ConnectorSetupBanner() {
   const providersUrl = getSupabaseProvidersUrl();
-  const allowlistUrls = getOAuthCallbackAllowlistUrls();
+  const loginAllowlistUrls = getOAuthCallbackAllowlistUrls();
+  const connectorCallbackUrls = getConnectorOAuthCallbackAllowlistUrls();
 
   return (
     <Card className="border-amber-500/30 bg-amber-500/5">
@@ -18,15 +20,37 @@ export function ConnectorSetupBanner() {
           <div className="space-y-1">
             <p className="font-medium text-foreground">OAuth setup for Google &amp; Microsoft</p>
             <p className="text-muted-foreground">
-              Live connectors: Google Contacts, Calendar, Gmail, and{" "}
-              <strong className="font-medium text-foreground">Outlook Contacts</strong>. Enable each
-              provider in Supabase before connecting.
+              Live connectors: Google Contacts, Calendar, Gmail, Outlook Contacts, and{" "}
+              <strong className="font-medium text-foreground">Outlook Email</strong>. Connectors use
+              direct OAuth (tokens on your workspace) so a mailbox can be connected even if that
+              Google/Microsoft login already belongs to another Potentially user.
             </p>
           </div>
 
           <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
             <li>
-              Open{" "}
+              Create Google / Azure OAuth clients and paste client ID + secret into{" "}
+              <code className="rounded bg-muted px-1">.env</code> as{" "}
+              <code className="rounded bg-muted px-1">GOOGLE_OAUTH_*</code> /{" "}
+              <code className="rounded bg-muted px-1">AZURE_OAUTH_*</code>
+            </li>
+            <li>
+              On each OAuth app, add these <strong className="font-medium text-foreground">
+                connector
+              </strong>{" "}
+              redirect URIs (Web):
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {connectorCallbackUrls.map((url) => (
+                  <li key={url}>
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{url}</code>
+                  </li>
+                ))}
+              </ul>
+            </li>
+            <li>
+              For{" "}
+              <strong className="font-medium text-foreground">Sign in with Google/Microsoft</strong>{" "}
+              only, also enable providers in{" "}
               <Link
                 href={providersUrl}
                 target="_blank"
@@ -35,57 +59,36 @@ export function ConnectorSetupBanner() {
               >
                 Supabase → Authentication → Providers
                 <ExternalLink className="h-3.5 w-3.5" />
-              </Link>
-            </li>
-            <li>
-              Enable <strong className="font-medium text-foreground">Google</strong> and/or{" "}
-              <strong className="font-medium text-foreground">Azure (Microsoft)</strong> and paste the
-              matching OAuth client ID + secret
-            </li>
-            <li>
-              Under URL Configuration, add these redirect URLs:
+              </Link>{" "}
+              and allowlist:
               <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                {allowlistUrls.map((url) => (
+                {loginAllowlistUrls.map((url) => (
                   <li key={url}>
                     <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{url}</code>
                   </li>
                 ))}
               </ul>
             </li>
-            <li>
-              Enable{" "}
-              <strong className="font-medium text-foreground">Manual linking</strong> so Connect works
-              while you are already signed in
-            </li>
           </ol>
 
           <div className="space-y-1 text-xs text-muted-foreground">
             <p>
               <strong className="font-medium text-foreground">Google Cloud:</strong> enable People,
-              Calendar, and Gmail APIs; add those scopes on the consent screen. Optional refresh
-              vars: <code className="rounded bg-muted px-1">GOOGLE_OAUTH_CLIENT_ID</code> /{" "}
-              <code className="rounded bg-muted px-1">GOOGLE_OAUTH_CLIENT_SECRET</code>.
+              Calendar, and Gmail APIs; add those scopes on the consent screen.
             </p>
             <p>
               <strong className="font-medium text-foreground">Microsoft Azure AD app:</strong> add
               delegated permissions{" "}
-              <code className="rounded bg-muted px-1">User.Read</code>,{" "}
+              <code className="rounded bg-muted px-1">User.Read</code> (required),{" "}
               <code className="rounded bg-muted px-1">email</code>,{" "}
               <code className="rounded bg-muted px-1">openid</code>,{" "}
               <code className="rounded bg-muted px-1">profile</code>,{" "}
-              <code className="rounded bg-muted px-1">offline_access</code>, and{" "}
-              <code className="rounded bg-muted px-1">Contacts.Read</code> (for Outlook Contacts).
-              Grant admin consent if required. Under{" "}
-              <strong className="font-medium text-foreground">Token configuration</strong>, add
-              optional claims <code className="rounded bg-muted px-1">email</code> and{" "}
-              <code className="rounded bg-muted px-1">xms_edov</code> on the ID token. Redirect URI:{" "}
-              <code className="rounded bg-muted px-1">
-                https://&lt;project-ref&gt;.supabase.co/auth/v1/callback
-              </code>
-              . Optional refresh vars:{" "}
-              <code className="rounded bg-muted px-1">AZURE_OAUTH_CLIENT_ID</code> /{" "}
-              <code className="rounded bg-muted px-1">AZURE_OAUTH_CLIENT_SECRET</code> /{" "}
-              <code className="rounded bg-muted px-1">AZURE_OAUTH_TENANT=common</code>.
+              <code className="rounded bg-muted px-1">offline_access</code>,{" "}
+              <code className="rounded bg-muted px-1">Contacts.Read</code>, and{" "}
+              <code className="rounded bg-muted px-1">Mail.Read</code> (Outlook Email). Grant{" "}
+              <strong className="font-medium text-foreground">admin consent</strong> for the
+              tenant. Keep the Supabase redirect URI for login, and add the connector callback
+              above for Connect.
             </p>
           </div>
         </div>

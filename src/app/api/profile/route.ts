@@ -2,10 +2,28 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getProfile, updateProfile } from "@/lib/data/profile";
 
+const optionalText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .optional()
+    .nullable()
+    .transform((value) => {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    });
+
 const profileSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  title: z.string().max(200).optional(),
-  bio: z.string().max(1000).optional(),
+  name: optionalText(120),
+  title: optionalText(200),
+  bio: optionalText(1000),
+  linkedin_url: optionalText(300),
+  company: optionalText(200),
+  location: optionalText(200),
+  website_url: optionalText(300),
+  avatar_url: optionalText(2000),
 });
 
 export async function GET() {

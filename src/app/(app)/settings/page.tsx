@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
 import { useUIStore } from "@/stores";
@@ -11,14 +11,12 @@ import type { Profile } from "@/types";
 import { DesktopOnly, MobileSegmented } from "@/components/mobile/primitives";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "sonner";
 import { EmailSenderSettings } from "@/components/settings/email-sender-settings";
+import { ProfileEditor } from "@/components/profile/profile-editor";
 
 const SETTINGS_KEY = "potentially-notification-prefs";
 
@@ -48,16 +46,11 @@ function readNotificationPrefs(): NotificationPrefs {
 }
 
 export default function SettingsPage() {
-  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const { compactMode, setCompactMode } = useUIStore();
   const { isMobileApp } = useMobileApp();
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [title, setTitle] = useState("");
   const [notifications, setNotifications] = useState(readNotificationPrefs);
-  const [saving, setSaving] = useState(false);
 
   const { data: profile, isLoading } = useQuery<Profile | null>({
     queryKey: ["profile"],
@@ -84,6 +77,9 @@ export default function SettingsPage() {
             bio: null,
             title: null,
             linkedin_url: null,
+            company: null,
+            location: null,
+            website_url: null,
             is_admin: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -96,38 +92,6 @@ export default function SettingsPage() {
     },
   });
 
-  useEffect(() => {
-    if (!profile) return;
-    // Sync editable fields when profile loads from the server.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- form draft mirrors fetched profile
-    setName(profile.name ?? "");
-    setEmail(profile.email ?? "");
-    setTitle(profile.title ?? "");
-  }, [profile]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, title }),
-      });
-      if (!res.ok) throw new Error("Failed to save profile");
-      const updated = (await res.json()) as Profile;
-      queryClient.setQueryData(["profile"], updated);
-      setName(updated.name ?? "");
-      setEmail(updated.email ?? "");
-      setTitle(updated.title ?? "");
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(notifications));
-      toast.success("Settings saved");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save settings");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const updateNotification = (key: keyof NotificationPrefs, checked: boolean) => {
     const next = { ...notifications, [key]: checked };
     setNotifications(next);
@@ -136,57 +100,22 @@ export default function SettingsPage() {
 
   const profilePanel = (
     <div className={isMobileApp ? "mobile-card-flat space-y-4 p-4" : "space-y-4"}>
-      {!isMobileApp && (
+      {isLoading || !profile ? (
+        <p className="text-sm text-muted-foreground">Loading profile…</p>
+      ) : !isMobileApp ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Profile</CardTitle>
-            <CardDescription>Update your personal information</CardDescription>
+            <CardDescription>
+              Photo and details teammates see when they open your profile
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Full name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={email} disabled type="email" />
-            </div>
-            <div className="space-y-2">
-              <Label>Title</Label>
-              <Input
-                placeholder="e.g. CEO at Acme Ventures"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save changes"}
-            </Button>
+          <CardContent>
+            <ProfileEditor profile={profile} />
           </CardContent>
         </Card>
-      )}
-      {isMobileApp && (
-        <>
-          <div className="space-y-2">
-            <Label>Full name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input value={email} disabled type="email" />
-          </div>
-          <div className="space-y-2">
-            <Label>Title</Label>
-            <Input
-              placeholder="e.g. CEO at Acme Ventures"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving} className="w-full rounded-xl">
-            {saving ? "Saving..." : "Save changes"}
-          </Button>
-        </>
+      ) : (
+        <ProfileEditor profile={profile} compact />
       )}
     </div>
   );

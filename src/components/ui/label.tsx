@@ -1,8 +1,12 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-const Label = React.forwardRef<HTMLLabelElement, React.ComponentProps<"label">>(
-  ({ className, ...props }, ref) => (
+type LabelProps = React.ComponentProps<"label"> & {
+  required?: boolean;
+};
+
+const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
+  ({ className, required, children, ...props }, ref) => (
     <label
       ref={ref}
       className={cn(
@@ -10,7 +14,14 @@ const Label = React.forwardRef<HTMLLabelElement, React.ComponentProps<"label">>(
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {required ? (
+        <span className="ml-0.5 text-destructive" aria-hidden="true">
+          *
+        </span>
+      ) : null}
+    </label>
   ),
 );
 Label.displayName = "Label";
