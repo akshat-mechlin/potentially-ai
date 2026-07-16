@@ -154,7 +154,7 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
         <div className="space-y-2">
           <FieldHint
             label="Calendly URL"
-            hint="Your Calendly scheduling link. Outbound emails include a tracked booking link automatically. When someone books (embed or Calendly webhook), the prospect is marked booked and follow-ups stop — no manual step."
+            hint="Your Calendly scheduling link. Outbound emails include a tracked booking link automatically. When someone books (embed or Calendly webhook), the prospect is marked booked and follow-ups stop. No manual step."
           />
           <Input
             value={calendlyUrl}
@@ -172,9 +172,9 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="assist">Assist — approve each send</SelectItem>
-              <SelectItem value="supervised">Supervised — drafts queued for review</SelectItem>
-              <SelectItem value="autonomous">Autonomous — auto-send after drafts</SelectItem>
+              <SelectItem value="assist">Assist: approve each send</SelectItem>
+              <SelectItem value="supervised">Supervised: drafts queued for review</SelectItem>
+              <SelectItem value="autonomous">Autonomous: auto-send after drafts</SelectItem>
             </SelectContent>
           </Select>
         </div>

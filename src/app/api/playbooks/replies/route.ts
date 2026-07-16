@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       runContactId: body.run_contact_id,
       from: "prospect@example.com",
       subject: body.subject ?? "Re: Quick intro",
-      body: body.body ?? "Thanks — happy to chat next week.",
+      body: body.body ?? "Thanks. Happy to chat next week.",
     });
     return NextResponse.json(result);
   } catch (error) {

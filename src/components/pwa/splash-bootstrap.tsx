@@ -2,11 +2,7 @@
  * Runs before React hydrates — syncs PWA viewport classes and guarantees splash dismiss
  * even if the client bundle fails to load (common iOS standalone edge cases).
  */
-export function SplashBootstrapScript() {
-  return (
-    <script
-      dangerouslySetInnerHTML={{
-        __html: `
+export const SPLASH_BOOTSTRAP_SCRIPT = `
 (function () {
   var root = document.documentElement;
   var path = window.location.pathname;
@@ -55,8 +51,4 @@ export function SplashBootstrapScript() {
     } catch (e) {}
   }, 2400);
 })();
-        `.trim(),
-      }}
-    />
-  );
-}
+`;

@@ -8,6 +8,7 @@ import { SUGGESTED_PROMPTS } from "@/lib/demo-data";
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { MobileChip, MobileChipRow, MobileLargeTitle, MobileSearchBar } from "@/components/mobile/native-ui";
+import { SegmentSaveBar } from "@/components/segments/segment-save-bar";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,11 +26,31 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
   const { workspaces } = useWorkspaces();
   const { isMobileApp } = useMobileApp();
   const [localQuery, setLocalQuery] = useState(query || initialQuery);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const initialSearchRan = useRef(false);
 
   const filteredGroup = initialGroupId
     ? workspaces.find((workspace) => workspace.id === initialGroupId)
     : null;
+
+  const resultContacts = results?.contacts ?? [];
+  const allSelected =
+    resultContacts.length > 0 && resultContacts.every((c) => selectedIds.includes(c.id));
+
+  const toggleContact = (contactId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(contactId) ? prev.filter((id) => id !== contactId) : [...prev, contactId],
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(resultContacts.map((c) => c.id));
+  };
 
   const handleSearch = async (searchQuery?: string) => {
     const q = searchQuery || localQuery;
@@ -38,6 +59,8 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
     setQuery(q);
     setIsSearching(true);
     addToHistory(q);
+    setSelectMode(false);
+    setSelectedIds([]);
 
     try {
       const res = await fetch("/api/search", {
@@ -75,7 +98,7 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
   const groupCount = workspaces.length;
 
   return (
-    <div className={isMobileApp ? "space-y-4" : "mx-auto max-w-3xl space-y-8"}>
+    <div className={isMobileApp ? "space-y-4 pb-24" : "mx-auto max-w-3xl space-y-8 pb-24"}>
       {isMobileApp && (
         <MobileLargeTitle title="Search" subtitle="Ask anything about your network" />
       )}
@@ -94,8 +117,8 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
                 Searching across{" "}
                 <strong className="font-medium text-foreground">
                   {groupCount} {groupCount === 1 ? "group" : "groups"}
-                </strong>{" "}
-                — your connections plus every teammate&apos;s synced contacts
+                </strong>
+                : your connections plus every teammate&apos;s synced contacts
               </>
             )}
           </span>
@@ -204,13 +227,56 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
             )}
           </div>
 
+          {resultContacts.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                {resultContacts.length} result{resultContacts.length === 1 ? "" : "s"}
+                {selectMode && selectedIds.length > 0
+                  ? ` · ${selectedIds.length} selected`
+                  : ""}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectMode && (
+                  <Button variant="outline" size="sm" onClick={toggleSelectAll}>
+                    {allSelected ? "Clear all" : "Select all"}
+                  </Button>
+                )}
+                <Button
+                  variant={selectMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setSelectMode((v) => !v);
+                    setSelectedIds([]);
+                  }}
+                >
+                  {selectMode
+                    ? isMobileApp
+                      ? "Done"
+                      : "Done selecting"
+                    : isMobileApp
+                      ? "Select"
+                      : "Select for segment"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
-            {(results.contacts ?? []).map((contact, i) => (
-              <SearchResultCard key={contact.id} contact={contact} index={i} />
+            {resultContacts.map((contact, i) => (
+              <SearchResultCard
+                key={contact.id}
+                contact={contact}
+                index={i}
+                selectable={selectMode}
+                selected={selectedIds.includes(contact.id)}
+                onToggle={toggleContact}
+              />
             ))}
           </div>
         </motion.div>
       )}
+
+      <SegmentSaveBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
     </div>
   );
 }

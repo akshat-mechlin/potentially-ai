@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ExternalLink, Loader2, Mail, MessageSquare, Trash2 } from "lucide-react";
+import { ChevronLeft, ExternalLink, Loader2, Mail, MessageSquare, MoreHorizontal, Trash2 } from "lucide-react";
 import { ProspectChat } from "@/components/playbooks/prospect-chat";
 import { ChatActivityTimeline } from "@/components/chats/chat-activity-timeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsClient } from "@/hooks/use-is-client";
@@ -92,17 +98,32 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
   const prospectHref = `/playbooks/${inbox.playbook_id}/prospects/${runContactId}`;
   const showProspectLink = inbox.direction === "outreach" && inbox.playbook_id;
 
-  const deleteButton = (
-    <Button
-      variant="outline"
-      size="sm"
-      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-      onClick={() => void deleteConversation()}
-      disabled={deleting}
-    >
-      {deleting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-2 h-3.5 w-3.5" />}
-      Delete
-    </Button>
+  const optionsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          disabled={deleting}
+          aria-label="Conversation options"
+        >
+          {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          disabled={deleting}
+          onSelect={() => {
+            void deleteConversation();
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete conversation
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   const header = (
@@ -146,7 +167,7 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
               </Link>
             </Button>
           )}
-          {deleteButton}
+          {optionsMenu}
         </div>
       </div>
     </div>
@@ -167,16 +188,35 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
               {inbox.company_name ?? inbox.playbook_name}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full text-destructive"
-            onClick={() => void deleteConversation()}
-            disabled={deleting}
-            aria-label="Delete conversation"
-          >
-            {deleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                disabled={deleting}
+                aria-label="Conversation options"
+              >
+                {deleting ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <MoreHorizontal className="h-5 w-5" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={deleting}
+                onSelect={() => {
+                  void deleteConversation();
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete conversation
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <Tabs defaultValue="chat" className="flex min-h-0 flex-1 flex-col">
@@ -197,6 +237,7 @@ export function ChatDetailPanel({ runContactId, showBackLink = false }: ChatDeta
             <ChatActivityTimeline activities={activities} />
           </TabsContent>
         </Tabs>
+        {confirmDialog}
       </div>
     );
   }

@@ -46,7 +46,7 @@ function LoginFormContent() {
 
   useEffect(() => {
     if (verified === "1") {
-      toast.success("Email verified — finishing sign-in…");
+      toast.success("Email verified. Finishing sign-in…");
       return;
     }
     if (authError === "auth") {

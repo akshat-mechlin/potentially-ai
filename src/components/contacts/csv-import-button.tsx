@@ -211,7 +211,7 @@ export function CsvImportButton({
     for (let i = 0; i < chunks.length; i++) {
       const isLast = i === chunks.length - 1;
       setProgress(
-        `${opts.fileName}${opts.sheetName ? ` · ${opts.sheetName}` : ""} — chunk ${i + 1}/${chunks.length}`,
+        `${opts.fileName}${opts.sheetName ? ` · ${opts.sheetName}` : ""}, chunk ${i + 1}/${chunks.length}`,
       );
 
       const res = await fetch("/api/contacts", {
@@ -298,8 +298,8 @@ export function CsvImportButton({
         <DialogHeader className="border-b border-border px-6 py-5 pr-12">
           <DialogTitle className="font-display text-xl">Import contacts</DialogTitle>
           <DialogDescription>
-            Upload one or more CSV / Excel files. All columns are optional — fill what you have.
-            Multi-sheet workbooks are supported.
+            Upload CSV / Excel with Apollo-style enrichment. We store every mapped column and use it
+            for lead scoring, search, AI summaries, and contact details, not just name and email.
           </DialogDescription>
         </DialogHeader>
 
@@ -315,7 +315,7 @@ export function CsvImportButton({
                 </span>
               ))}
               <span className="rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs text-muted-foreground">
-                +45 optional fields
+                +45 enrichment fields
               </span>
             </div>
             <Button variant="outline" size="sm" asChild>
@@ -327,9 +327,9 @@ export function CsvImportButton({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Download the template for the full column set (phones, LinkedIn, funding, etc.). Empty
-            cells are fine — only available values are imported. Need a name (or first + last) or an
-            email per row.
+            Download the template for the full set (seniority, industry, phones, LinkedIn, funding,
+            location, etc.). Those fields power lead scores, search ranking, and AI summaries.
+            Empty cells are fine. Each row needs a name (or first + last) or an email.
           </p>
 
           <input

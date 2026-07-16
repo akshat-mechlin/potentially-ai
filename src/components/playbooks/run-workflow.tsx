@@ -224,7 +224,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
     try {
       const res = await fetch(`${playbookRunApiBase(runId)}/drafts`, { method: "POST" });
       if (!res.ok) throw new Error("Failed to generate drafts");
-      toast.success("Drafts generated — review and approve to send");
+      toast.success("Drafts generated. Review and approve to send.");
       refetch();
     } catch {
       toast.error("Failed to generate drafts");
@@ -251,7 +251,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error ?? "Failed to send");
-      toast.success(payload.dry_run ? "Dry run — email logged" : "Email sent");
+      toast.success(payload.dry_run ? "Dry run. Email logged." : "Email sent");
       refetch();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to send");

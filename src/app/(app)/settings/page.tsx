@@ -134,12 +134,12 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-muted-foreground">
             <p>
-              <span className="font-medium text-foreground">Automation:</span> Assist mode — drafts
+              <span className="font-medium text-foreground">Automation:</span> Assist mode. Drafts
               require your approval before sending.
             </p>
             <p>
-              <span className="font-medium text-foreground">Outreach:</span> Warm path preferred —
-              contacts with intro routes are prioritized.
+              <span className="font-medium text-foreground">Outreach:</span> Warm path preferred.
+              Contacts with intro routes are prioritized.
             </p>
             <p>
               <span className="font-medium text-foreground">Dedupe & cooldown:</span> Configure per
@@ -162,7 +162,7 @@ export default function SettingsPage() {
       ) : (
         <>
           <p>
-            <span className="font-medium text-foreground">Automation:</span> Assist mode — drafts
+            <span className="font-medium text-foreground">Automation:</span> Assist mode. Drafts
             require approval before sending.
           </p>
           <p>

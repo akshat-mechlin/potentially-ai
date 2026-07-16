@@ -113,12 +113,12 @@ export function SegmentSaveBar({ selectedIds, onClear }: SegmentSaveBarProps) {
             </div>
             {mode === "new" ? (
               <div className="space-y-2">
-                <Label>Segment name</Label>
+                <Label required>Segment name</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             ) : (
               <div className="space-y-2">
-                <Label>Segment</Label>
+                <Label required>Segment</Label>
                 <Select value={segmentId} onValueChange={setSegmentId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Choose segment" />
@@ -133,7 +133,14 @@ export function SegmentSaveBar({ selectedIds, onClear }: SegmentSaveBarProps) {
                 </Select>
               </div>
             )}
-            <Button onClick={handleSave} disabled={saving} className="w-full">
+            <Button
+              onClick={handleSave}
+              disabled={
+                saving ||
+                (mode === "new" ? !name.trim() : !segmentId)
+              }
+              className="w-full"
+            >
               {saving ? "Saving..." : `Save ${selectedIds.length} contacts`}
             </Button>
           </div>

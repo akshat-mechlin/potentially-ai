@@ -8,7 +8,7 @@ let demoTemplates: EmailTemplate[] = [
     workspace_id: "demo-workspace-001",
     created_by: "demo-user-001",
     name: "Intro call request",
-    subject: "Quick intro — {{company}}",
+    subject: "Quick intro: {{company}}",
     preheader: "15-minute chat",
     body_html: "<p>Hi {{name}},</p><p>I noticed your work at {{company}} and would love a brief intro call.</p>",
     body_text: "Hi {{name}}, I noticed your work at {{company}} and would love a brief intro call.",

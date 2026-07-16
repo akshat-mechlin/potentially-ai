@@ -6,6 +6,15 @@ import {
   importDemoContacts,
 } from "@/lib/demo-store";
 import { buildContactEmbedding } from "@/lib/data/embeddings";
+import { computeLeadScore, contactSearchSnippet } from "@/lib/contacts/enrichment";
+import {
+  buildMergedContactUpdate,
+  findExistingContact,
+  indexExistingContacts,
+  normalizeEmail,
+  normalizePersonName,
+  type ExistingContactMatch,
+} from "@/lib/contacts/contact-dedupe";
 import { getUserWorkspaceContext, listUserWorkspaces } from "@/lib/data/workspace";
 import {
   isContactExcluded,
@@ -22,6 +31,9 @@ type SearchContactMatch = {
   title: string | null;
   email: string | null;
   company_name: string | null;
+  location?: string | null;
+  strength_score?: number;
+  enrichment_snippet?: string | null;
   similarity?: number;
   network_owner_name?: string | null;
   group_name?: string | null;
@@ -43,7 +55,7 @@ async function attachContactMetadata(
   const { data } = await supabase
     .from("contacts")
     .select(
-      "id, owner:profiles!contacts_owner_id_fkey(name, email), workspace:workspaces(name)",
+      "id, location, strength_score, metadata, owner:profiles!contacts_owner_id_fkey(name, email), workspace:workspaces(name)",
     )
     .in(
       "id",
@@ -54,6 +66,7 @@ async function attachContactMetadata(
     (data ?? []).map((row) => {
       const workspace = row.workspace as { name: string } | { name: string }[] | null;
       const workspaceName = Array.isArray(workspace) ? workspace[0]?.name : workspace?.name;
+      const contactMeta = (row.metadata as Record<string, unknown> | null) ?? null;
       return [
         row.id as string,
         {
@@ -64,16 +77,28 @@ async function attachContactMetadata(
               | null,
           ),
           group_name: workspaceName ?? null,
+          location: (row.location as string | null) ?? null,
+          strength_score: typeof row.strength_score === "number" ? row.strength_score : 0,
+          enrichment_snippet: contactSearchSnippet({
+            location: row.location as string | null,
+            metadata: contactMeta,
+          }),
         },
       ];
     }),
   );
 
-  return rows.map((row) => ({
-    ...row,
-    network_owner_name: metadata.get(row.id)?.network_owner_name ?? null,
-    group_name: metadata.get(row.id)?.group_name ?? null,
-  }));
+  return rows.map((row) => {
+    const extra = metadata.get(row.id);
+    return {
+      ...row,
+      network_owner_name: extra?.network_owner_name ?? null,
+      group_name: extra?.group_name ?? null,
+      location: extra?.location ?? row.location ?? null,
+      strength_score: extra?.strength_score ?? row.strength_score ?? 0,
+      enrichment_snippet: extra?.enrichment_snippet ?? row.enrichment_snippet ?? null,
+    };
+  });
 }
 
 type ListContactsOptions = {
@@ -408,12 +433,13 @@ export async function searchContactsForQuery(
   let textQuery = supabase
     .from("contacts")
     .select(
-      "id, full_name, title, email, company_name, owner:profiles!contacts_owner_id_fkey(name, email), workspace:workspaces(name)",
+      "id, full_name, title, email, company_name, location, strength_score, metadata, owner:profiles!contacts_owner_id_fkey(name, email), workspace:workspaces(name)",
     )
     .in("workspace_id", workspaceIds)
     .or(
-      `full_name.ilike.%${query}%,title.ilike.%${query}%,company_name.ilike.%${query}%,email.ilike.%${query}%`,
+      `full_name.ilike.%${query}%,title.ilike.%${query}%,company_name.ilike.%${query}%,email.ilike.%${query}%,location.ilike.%${query}%`,
     )
+    .order("strength_score", { ascending: false })
     .limit(20);
 
   if (options?.ownerId) {
@@ -424,6 +450,7 @@ export async function searchContactsForQuery(
 
   return (textMatches ?? []).map((c, i) => {
     const row = c as SearchContactMatch & {
+      metadata?: Record<string, unknown> | null;
       owner: { name: string | null; email: string | null } | { name: string | null; email: string | null }[] | null;
       workspace: { name: string } | { name: string }[] | null;
     };
@@ -434,6 +461,12 @@ export async function searchContactsForQuery(
       title: row.title,
       email: row.email,
       company_name: row.company_name,
+      location: row.location ?? null,
+      strength_score: row.strength_score ?? 0,
+      enrichment_snippet: contactSearchSnippet({
+        location: row.location,
+        metadata: row.metadata ?? null,
+      }),
       similarity: 0.85 - i * 0.03,
       network_owner_name: ownerNameFromProfile(row.owner),
       group_name: workspace?.name ?? null,
@@ -507,20 +540,14 @@ function rowMetadata(row: ImportRow, base: Record<string, unknown>) {
   };
 }
 
-function preserveExclusionFlags(metadata: Record<string, unknown> | null | undefined) {
-  if (!metadata || metadata.excluded !== true) return {};
-  return {
-    excluded: true,
-    excluded_at: metadata.excluded_at ?? null,
-  };
-}
-
 function rowDbFields(row: ImportRow) {
+  const metadata = row.extras ?? {};
+  const email = normalizeEmail(row.email);
   return {
     full_name: row.full_name,
     first_name: row.first_name ?? null,
     last_name: row.last_name ?? null,
-    email: row.email?.trim() || null,
+    email,
     title: row.title ?? null,
     company_name: row.company_name ?? null,
     phone: row.phone ?? null,
@@ -528,7 +555,117 @@ function rowDbFields(row: ImportRow) {
     twitter_url: row.twitter_url ?? null,
     location: row.location ?? null,
     external_id: row.external_id ?? null,
+    strength_score: computeLeadScore({
+      title: row.title,
+      company_name: row.company_name,
+      email,
+      phone: row.phone,
+      linkedin_url: row.linkedin_url,
+      location: row.location,
+      extras: row.extras,
+      metadata,
+    }),
   };
+}
+
+const EXISTING_CONTACT_SELECT =
+  "id, full_name, email, external_id, title, company_name, phone, linkedin_url, twitter_url, location, first_name, last_name, strength_score, metadata";
+
+function asExistingMatch(row: Record<string, unknown>): ExistingContactMatch {
+  return {
+    id: String(row.id),
+    full_name: String(row.full_name ?? ""),
+    email: (row.email as string | null) ?? null,
+    external_id: (row.external_id as string | null) ?? null,
+    title: (row.title as string | null) ?? null,
+    company_name: (row.company_name as string | null) ?? null,
+    phone: (row.phone as string | null) ?? null,
+    linkedin_url: (row.linkedin_url as string | null) ?? null,
+    twitter_url: (row.twitter_url as string | null) ?? null,
+    location: (row.location as string | null) ?? null,
+    first_name: (row.first_name as string | null) ?? null,
+    last_name: (row.last_name as string | null) ?? null,
+    strength_score: typeof row.strength_score === "number" ? row.strength_score : 0,
+    metadata: (row.metadata as Record<string, unknown> | null) ?? null,
+  };
+}
+
+/** Load workspace contacts that could match this import batch (email / name / external_id). */
+async function loadExistingMatchesForImport(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  workspaceId: string,
+  rows: ImportRow[],
+): Promise<ExistingContactMatch[]> {
+  const emails = [
+    ...new Set(rows.map((r) => normalizeEmail(r.email)).filter((e): e is string => Boolean(e))),
+  ];
+  const names = [
+    ...new Set(
+      rows
+        .filter((r) => !normalizeEmail(r.email))
+        .map((r) => r.full_name?.trim())
+        .filter((n): n is string => Boolean(n)),
+    ),
+  ];
+  const externalIds = [
+    ...new Set(rows.map((r) => r.external_id?.trim()).filter((id): id is string => Boolean(id))),
+  ];
+
+  const found = new Map<string, ExistingContactMatch>();
+
+  const quoteFilterValue = (value: string) => `"${value.replace(/"/g, "")}"`;
+
+  for (let i = 0; i < emails.length; i += 100) {
+    const slice = emails.slice(i, i + 100);
+    // Case-insensitive email match via ilike (no wildcards)
+    const orFilter = slice.map((email) => `email.ilike.${quoteFilterValue(email)}`).join(",");
+    const { data } = await supabase
+      .from("contacts")
+      .select(EXISTING_CONTACT_SELECT)
+      .eq("workspace_id", workspaceId)
+      .or(orFilter);
+    for (const row of data ?? []) {
+      const match = asExistingMatch(row);
+      found.set(match.id, match);
+    }
+  }
+
+  for (let i = 0; i < externalIds.length; i += 200) {
+    const slice = externalIds.slice(i, i + 200);
+    const { data } = await supabase
+      .from("contacts")
+      .select(EXISTING_CONTACT_SELECT)
+      .eq("workspace_id", workspaceId)
+      .in("external_id", slice);
+    for (const row of data ?? []) {
+      const match = asExistingMatch(row);
+      found.set(match.id, match);
+    }
+  }
+
+  for (let i = 0; i < names.length; i += 100) {
+    const slice = names.slice(i, i + 100);
+    const orFilter = slice
+      .map((name) => `full_name.ilike.${quoteFilterValue(name)}`)
+      .join(",");
+    if (!orFilter) continue;
+    const { data } = await supabase
+      .from("contacts")
+      .select(EXISTING_CONTACT_SELECT)
+      .eq("workspace_id", workspaceId)
+      .or(orFilter);
+    for (const row of data ?? []) {
+      const match = asExistingMatch(row);
+      // Only keep name matches that normalize equal (ilike is broader)
+      const wanted = new Set(slice.map((n) => normalizePersonName(n)).filter(Boolean));
+      if (wanted.has(normalizePersonName(match.full_name))) {
+        found.set(match.id, match);
+      }
+    }
+  }
+
+  return [...found.values()];
 }
 
 export async function importContactsFromSource(
@@ -552,91 +689,187 @@ export async function importContactsFromSource(
   if (options?.fileName) metadataBase.file_name = options.fileName;
   if (options?.sheetName) metadataBase.sheet_name = options.sheetName;
 
-  // Fast path for CSV / large imports: bulk insert, no per-row AI embeddings.
+  // Fast path for CSV / large imports: bulk insert + lead scores, embeddings backfilled async.
   if (skipEmbeddings) {
-    return bulkImportContacts(supabase, {
+    const result = await bulkImportContacts(supabase, {
       rows,
       source,
       workspaceId,
       ownerId: userId,
       metadata: metadataBase,
     });
+    // Enrich search embeddings in the background so CSV fields power semantic search.
+    void backfillImportEmbeddings(supabase, {
+      workspaceId,
+      importBatchId: typeof metadataBase.import_batch_id === "string" ? metadataBase.import_batch_id : null,
+      rows,
+    }).catch((error) => {
+      console.error("Contact embedding backfill failed:", error);
+    });
+    return result;
   }
 
   let imported = 0;
   let updated = 0;
 
+  const existingRows = await loadExistingMatchesForImport(supabase, workspaceId, rows);
+  const indexes = indexExistingContacts(existingRows);
+
   for (const row of rows) {
-    const embedding = await buildContactEmbedding(row);
-    const metadata = rowMetadata(row, metadataBase);
     const fields = rowDbFields(row);
+    const metadata = rowMetadata(row, metadataBase);
+    const existing = findExistingContact(indexes, row);
 
-    if (row.external_id) {
-      const { data: existing } = await supabase
+    if (existing) {
+      const merged = buildMergedContactUpdate({
+        existing,
+        incoming: fields,
+        source,
+        metadataIncoming: metadata,
+      });
+      const embedding = await buildContactEmbedding({
+        ...merged,
+        metadata: merged.metadata,
+      });
+      await supabase
         .from("contacts")
-        .select("id, metadata")
-        .eq("workspace_id", workspaceId)
-        .eq("external_id", row.external_id)
-        .maybeSingle();
+        .update({
+          ...merged,
+          embedding,
+        })
+        .eq("id", existing.id);
 
-      if (existing) {
-        await supabase
-          .from("contacts")
-          .update({
-            ...fields,
-            embedding,
-            source,
-            metadata: {
-              ...((existing.metadata as Record<string, unknown> | null) ?? {}),
-              ...metadata,
-              ...preserveExclusionFlags(existing.metadata as Record<string, unknown> | null),
-            },
-          })
-          .eq("id", existing.id);
-        updated += 1;
-        continue;
-      }
-    } else if (row.email) {
-      const { data: existing } = await supabase
-        .from("contacts")
-        .select("id, metadata")
-        .eq("workspace_id", workspaceId)
-        .eq("email", row.email)
-        .maybeSingle();
+      // Keep indexes fresh for later rows in this batch
+      const refreshed: ExistingContactMatch = {
+        ...existing,
+        full_name: merged.full_name,
+        email: merged.email,
+        external_id: merged.external_id,
+        title: merged.title,
+        company_name: merged.company_name,
+        phone: merged.phone,
+        linkedin_url: merged.linkedin_url,
+        twitter_url: merged.twitter_url,
+        location: merged.location,
+        first_name: merged.first_name,
+        last_name: merged.last_name,
+        strength_score: merged.strength_score,
+        metadata: merged.metadata,
+      };
+      if (existing.external_id) indexes.byExternalId.set(existing.external_id, refreshed);
+      if (merged.external_id) indexes.byExternalId.set(merged.external_id, refreshed);
+      if (merged.email) indexes.byEmail.set(merged.email, refreshed);
+      const nameKey = normalizePersonName(merged.full_name);
+      if (nameKey) indexes.byName.set(nameKey, refreshed);
 
-      if (existing) {
-        await supabase
-          .from("contacts")
-          .update({
-            ...fields,
-            embedding,
-            source,
-            metadata: {
-              ...(existing.metadata ?? {}),
-              ...metadata,
-              ...preserveExclusionFlags(existing.metadata as Record<string, unknown> | null),
-            },
-          })
-          .eq("id", existing.id);
-        updated += 1;
-        continue;
-      }
+      updated += 1;
+      continue;
     }
 
-    const { error } = await supabase.from("contacts").insert({
+    const embedding = await buildContactEmbedding({
       ...fields,
-      workspace_id: workspaceId,
-      owner_id: userId,
-      source,
-      tags: ["imported"],
-      embedding,
+      extras: row.extras,
       metadata,
     });
 
-    if (!error) imported += 1;
+    const { data: inserted, error } = await supabase
+      .from("contacts")
+      .insert({
+        ...fields,
+        workspace_id: workspaceId,
+        owner_id: userId,
+        source,
+        tags: ["imported"],
+        embedding,
+        metadata: {
+          ...metadata,
+          sources: [source],
+          ...(fields.external_id
+            ? { external_ids: { [source]: fields.external_id } }
+            : {}),
+        },
+      })
+      .select(EXISTING_CONTACT_SELECT)
+      .maybeSingle();
+
+    if (!error && inserted) {
+      imported += 1;
+      const match = asExistingMatch(inserted);
+      if (match.external_id) indexes.byExternalId.set(match.external_id, match);
+      if (match.email) indexes.byEmail.set(normalizeEmail(match.email)!, match);
+      const nameKey = normalizePersonName(match.full_name);
+      if (nameKey) indexes.byName.set(nameKey, match);
+    }
   }
 
   return { imported, updated, duplicates: 0 };
+}
+
+const EMBEDDING_BACKFILL_CONCURRENCY = 6;
+const EMBEDDING_BACKFILL_LIMIT = 200;
+
+async function backfillImportEmbeddings(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  args: {
+    workspaceId: string;
+    importBatchId: string | null;
+    rows: ImportRow[];
+  },
+) {
+  const { workspaceId, importBatchId, rows } = args;
+  let contactIds: string[] = [];
+
+  if (importBatchId) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .contains("metadata", { import_batch_id: importBatchId })
+      .is("embedding", null)
+      .limit(EMBEDDING_BACKFILL_LIMIT);
+    contactIds = (data ?? []).map((row: { id: string }) => row.id);
+  } else {
+    const emails = [
+      ...new Set(rows.map((r) => r.email?.trim()).filter((e): e is string => Boolean(e))),
+    ].slice(0, EMBEDDING_BACKFILL_LIMIT);
+    if (!emails.length) return;
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .in("email", emails)
+      .is("embedding", null);
+    contactIds = (data ?? []).map((row: { id: string }) => row.id);
+  }
+
+  for (let i = 0; i < contactIds.length; i += EMBEDDING_BACKFILL_CONCURRENCY) {
+    const wave = contactIds.slice(i, i + EMBEDDING_BACKFILL_CONCURRENCY);
+    await Promise.all(
+      wave.map(async (id) => {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select(
+            "id, full_name, title, company_name, email, bio, location, linkedin_url, tags, metadata",
+          )
+          .eq("id", id)
+          .maybeSingle();
+        if (!contact) return;
+        const embedding = await buildContactEmbedding({
+          full_name: contact.full_name,
+          title: contact.title,
+          company_name: contact.company_name,
+          email: contact.email,
+          bio: contact.bio,
+          location: contact.location,
+          linkedin_url: contact.linkedin_url,
+          tags: contact.tags ?? [],
+          metadata: (contact.metadata as Record<string, unknown> | null) ?? null,
+        });
+        await supabase.from("contacts").update({ embedding }).eq("id", id);
+      }),
+    );
+  }
 }
 
 async function bulkImportContacts(
@@ -654,47 +887,71 @@ async function bulkImportContacts(
   let imported = 0;
   let updated = 0;
 
-  const emails = [
-    ...new Set(
-      rows.map((r) => r.email?.trim()).filter((e): e is string => Boolean(e)),
-    ),
-  ];
-
-  const existingByEmail = new Map<string, string>();
-  for (let i = 0; i < emails.length; i += 500) {
-    const slice = emails.slice(i, i + 500);
-    const { data } = await supabase
-      .from("contacts")
-      .select("id, email")
-      .eq("workspace_id", workspaceId)
-      .in("email", slice);
-    for (const row of data ?? []) {
-      if (row.email) existingByEmail.set(String(row.email).toLowerCase(), row.id);
-    }
-  }
+  const existingRows = await loadExistingMatchesForImport(supabase, workspaceId, rows);
+  const indexes = indexExistingContacts(existingRows);
 
   const toInsert: Array<Record<string, unknown>> = [];
-  const toUpdate: Array<{ id: string; row: ImportRow }> = [];
+  const toUpdate: Array<{ id: string; payload: Record<string, unknown> }> = [];
+  const pendingEmails = new Set<string>();
+  const pendingNames = new Set<string>();
 
   for (const row of rows) {
-    const emailKey = row.email?.trim().toLowerCase();
-    const existingId = emailKey ? existingByEmail.get(emailKey) : undefined;
-    if (existingId && existingId !== "pending") {
-      toUpdate.push({ id: existingId, row });
+    const fields = rowDbFields(row);
+    const emailKey = normalizeEmail(row.email);
+    const nameKey = normalizePersonName(row.full_name);
+    const existing = findExistingContact(indexes, row);
+
+    if (existing) {
+      const merged = buildMergedContactUpdate({
+        existing,
+        incoming: fields,
+        source,
+        metadataIncoming: rowMetadata(row, metadata),
+      });
+      toUpdate.push({ id: existing.id, payload: merged });
+
+      const refreshed: ExistingContactMatch = {
+        ...existing,
+        full_name: merged.full_name,
+        email: merged.email,
+        external_id: merged.external_id,
+        title: merged.title,
+        company_name: merged.company_name,
+        phone: merged.phone,
+        linkedin_url: merged.linkedin_url,
+        twitter_url: merged.twitter_url,
+        location: merged.location,
+        first_name: merged.first_name,
+        last_name: merged.last_name,
+        strength_score: merged.strength_score,
+        metadata: merged.metadata,
+      };
+      if (existing.external_id) indexes.byExternalId.set(existing.external_id, refreshed);
+      if (merged.external_id) indexes.byExternalId.set(merged.external_id, refreshed);
+      if (merged.email) indexes.byEmail.set(merged.email, refreshed);
+      const refreshedName = normalizePersonName(merged.full_name);
+      if (refreshedName) indexes.byName.set(refreshedName, refreshed);
       continue;
     }
-    if (existingId === "pending") {
-      continue;
-    }
+
+    if (emailKey && pendingEmails.has(emailKey)) continue;
+    if (!emailKey && nameKey && pendingNames.has(nameKey)) continue;
+
     toInsert.push({
-      ...rowDbFields(row),
+      ...fields,
       workspace_id: workspaceId,
       owner_id: ownerId,
       source,
       tags: ["imported"],
-      metadata: rowMetadata(row, metadata),
+      metadata: {
+        ...rowMetadata(row, metadata),
+        sources: [source],
+        ...(fields.external_id ? { external_ids: { [source]: fields.external_id } } : {}),
+      },
     });
-    if (emailKey) existingByEmail.set(emailKey, "pending");
+
+    if (emailKey) pendingEmails.add(emailKey);
+    else if (nameKey) pendingNames.add(nameKey);
   }
 
   for (let i = 0; i < toInsert.length; i += BULK_INSERT_SIZE) {
@@ -711,16 +968,7 @@ async function bulkImportContacts(
   for (let i = 0; i < toUpdate.length; i += UPDATE_CONCURRENCY) {
     const wave = toUpdate.slice(i, i + UPDATE_CONCURRENCY);
     const results = await Promise.all(
-      wave.map(({ id, row }) =>
-        supabase
-          .from("contacts")
-          .update({
-            ...rowDbFields(row),
-            source,
-            metadata: rowMetadata(row, metadata),
-          })
-          .eq("id", id),
-      ),
+      wave.map(({ id, payload }) => supabase.from("contacts").update(payload).eq("id", id)),
     );
     updated += results.filter((r: { error: unknown }) => !r.error).length;
   }

@@ -129,9 +129,6 @@ export function Header({ title, userName = "Alex Morgan", userAvatar, immersiveM
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push("/settings")}>
-                Settings
-              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
               >

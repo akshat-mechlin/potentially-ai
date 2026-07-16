@@ -14,6 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { Contact, OutreachResult } from "@/types";
+import type { MutualConnection } from "@/lib/data/mutual-connections";
 import { MobileHeaderTitle } from "@/components/layout/mobile-header-title";
 import {
   DesktopOnly,
@@ -34,8 +35,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { contactHref } from "@/lib/routes/contacts";
+import { STRENGTH_SCORE_HINT } from "@/lib/contacts/enrichment";
 import type { ContactDetailPoint } from "@/lib/contacts/profile-details";
 import { ContactProfileSummary } from "@/components/contacts/contact-profile-summary";
+import { InfoHint } from "@/components/playbooks/field-hint";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -72,16 +75,22 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
     },
   });
 
-  const { data: allContacts } = useQuery<{ contacts: Contact[] }>({
+  const { data: mutualPayload, isLoading: mutualsLoading } = useQuery<{
+    mutuals: MutualConnection[];
+  }>({
     queryKey: ["contacts", "mutual", id],
-    queryFn: () => fetch("/api/contacts?limit=4").then((r) => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/contacts/${id}/mutuals`);
+      if (!res.ok) throw new Error("Failed to load mutual connections");
+      return res.json();
+    },
   });
 
   const { data: profileSummary } = useQuery<{
     summary: string;
     details: ContactDetailPoint[];
   }>({
-    queryKey: ["contact-summary", id, "v3"],
+    queryKey: ["contact-summary", id, "v5"],
     queryFn: async () => {
       const res = await fetch(`/api/contacts/${id}/summary`);
       if (!res.ok) throw new Error("Failed to load summary");
@@ -91,6 +100,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   });
   const summary = profileSummary?.summary;
   const detailPoints = profileSummary?.details ?? [];
+  const mutualContacts = mutualPayload?.mutuals ?? [];
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading contact...</p>;
@@ -145,8 +155,6 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
       toast.error(error instanceof Error ? error.message : "Failed to request introduction");
     }
   };
-
-  const mutualContacts = (allContacts?.contacts ?? []).filter((c) => c.id !== id).slice(0, 3);
 
   const timelineEvents = [
     { type: "email", title: "Email exchange", date: contact.last_interaction_at },
@@ -258,7 +266,14 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           </div>
 
           <MobileKpiStrip
-            items={[{ label: "Strength", value: `${contact.strength_score}%`, icon: Sparkles }]}
+            items={[
+              {
+                label: "Strength",
+                value: `${contact.strength_score}%`,
+                icon: Sparkles,
+                hint: STRENGTH_SCORE_HINT,
+              },
+            ]}
           />
 
           <MobileSegmented
@@ -279,20 +294,28 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                 variant="mobile"
               />
 
-              {mutualContacts.length > 0 && (
+              {(mutualsLoading || mutualContacts.length > 0) && (
                 <div className="mobile-menu-list">
                   <p className="mobile-section-label px-1">Mutual connections</p>
-                  {mutualContacts.map((c) => (
-                    <Link key={c.id} href={contactHref(c.id)} className="mobile-menu-item">
-                      <span className="mobile-menu-item-icon-muted">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="text-[10px]">{getInitials(c.full_name)}</AvatarFallback>
-                        </Avatar>
-                      </span>
-                      <span className="min-w-0 flex-1 truncate font-medium">{c.full_name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{c.title}</span>
-                    </Link>
-                  ))}
+                  {mutualsLoading ? (
+                    <p className="px-1 text-sm text-muted-foreground">Finding connections…</p>
+                  ) : (
+                    mutualContacts.map((c) => (
+                      <Link key={c.id} href={contactHref(c.id)} className="mobile-menu-item">
+                        <span className="mobile-menu-item-icon-muted">
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-[10px]">
+                              {getInitials(c.full_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </span>
+                        <span className="min-w-0 flex-1 truncate font-medium">{c.full_name}</span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {c.reason_label}
+                        </span>
+                      </Link>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -384,7 +407,14 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         </div>
         <div className="text-right">
           <div className="font-display text-2xl text-primary">{contact.strength_score}%</div>
-          <p className="text-xs text-muted-foreground">Relationship strength</p>
+          <p className="inline-flex items-center justify-end gap-1 text-xs text-muted-foreground">
+            Relationship strength
+            <InfoHint
+              label="Relationship strength"
+              hint={STRENGTH_SCORE_HINT}
+              side="left"
+            />
+          </p>
         </div>
       </div>
 
@@ -407,21 +437,33 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
               <CardTitle className="text-base">Mutual connections</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {mutualContacts.map((c) => (
-                <Link
-                  key={c.id}
-                  href={contactHref(c.id)}
-                  className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
-                >
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>{getInitials(c.full_name)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{c.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{c.title}</p>
-                  </div>
-                </Link>
-              ))}
+              {mutualsLoading ? (
+                <p className="text-sm text-muted-foreground">Finding connections…</p>
+              ) : mutualContacts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No mutual connections found yet. People at the same company, shared email
+                  domains, or linked relationship events will show up here.
+                </p>
+              ) : (
+                mutualContacts.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={contactHref(c.id)}
+                    className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/50"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback>{getInitials(c.full_name)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{c.full_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {[c.title, c.company_name].filter(Boolean).join(" · ") || c.reason_label}
+                      </p>
+                      <p className="mt-0.5 text-xs text-primary/80">{c.reason_label}</p>
+                    </div>
+                  </Link>
+                ))
+              )}
             </CardContent>
           </Card>
 

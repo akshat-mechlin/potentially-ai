@@ -75,7 +75,7 @@ function GroupsPageContent() {
 
   useEffect(() => {
     if (searchParams.get("upgraded") === "1") {
-      toast.success("Upgrade initiated — your plan will update after payment completes.");
+      toast.success("Upgrade initiated. Your plan will update after payment completes.");
       router.replace("/groups", { scroll: false });
     }
   }, [searchParams, router]);

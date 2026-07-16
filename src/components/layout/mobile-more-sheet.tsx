@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useUIStore } from "@/stores";
-import { agentModeNav, moreMenuItems } from "@/lib/nav-items";
+import { agentModeCoreItems, agentModeNav, agentModeWorkflowItem, moreMenuItems, resourcesNav } from "@/lib/nav-items";
 import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
 import {
   MobileBottomSheet,
@@ -22,7 +22,7 @@ export function MobileMoreSheet() {
       <div className="space-y-4 p-4">
         {agentModeEnabled && (
           <MobileListSection title={agentModeNav.label}>
-            {agentModeNav.items.map((item) => (
+            {agentModeCoreItems.map((item) => (
               <MobileListTile
                 key={item.href}
                 href={item.href}
@@ -32,8 +32,28 @@ export function MobileMoreSheet() {
                 onClick={close}
               />
             ))}
+            <MobileListTile
+              href={agentModeWorkflowItem.href}
+              icon={agentModeWorkflowItem.icon}
+              title={agentModeWorkflowItem.label}
+              iconMuted={!pathname.startsWith(agentModeWorkflowItem.href)}
+              onClick={close}
+            />
           </MobileListSection>
         )}
+
+        <MobileListSection title={resourcesNav.label}>
+          {resourcesNav.items.map((item) => (
+            <MobileListTile
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              title={item.label}
+              iconMuted={!(pathname === item.href || pathname.startsWith(`${item.href}/`))}
+              onClick={close}
+            />
+          ))}
+        </MobileListSection>
 
         <MobileListSection title="Menu">
           {moreMenuItems.map((item) => (

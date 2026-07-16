@@ -102,7 +102,7 @@ function DeliveryBanner({ data }: { data: ThreadResponse }) {
     return (
       <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
         <MessageSquare className="mr-1.5 inline h-3.5 w-3.5" />
-        This person is on Potentially — chat messages are delivered in their inbox.
+        This person is on Potentially. Chat messages go to their inbox.
       </div>
     );
   }
@@ -110,7 +110,7 @@ function DeliveryBanner({ data }: { data: ThreadResponse }) {
   return (
     <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground">
       <Mail className="mr-1.5 inline h-3.5 w-3.5" />
-      Not on Potentially yet — messages are emailed with an invite to join and reply here.
+      Not on Potentially yet. Messages are emailed with an invite to join and reply here.
     </div>
   );
 }

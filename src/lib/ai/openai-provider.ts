@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 import type { SearchResult, OutreachResult } from "@/types";
+import {
+  CONTACT_SUMMARY_SYSTEM,
+  type ContactSummaryInput,
+} from "@/lib/ai/contact-summary";
 import { searchResultSchema } from "@/lib/ai/schemas";
 
 const openai = process.env.OPENAI_API_KEY
@@ -44,6 +48,9 @@ export async function openaiRankAndExplain(
     title: string | null;
     email: string | null;
     company_name: string | null;
+    location?: string | null;
+    strength_score?: number;
+    enrichment_snippet?: string | null;
     similarity?: number;
   }>,
 ): Promise<SearchResult> {
@@ -55,6 +62,8 @@ export async function openaiRankAndExplain(
       {
         role: "system",
         content: `You are a relationship intelligence assistant. Rank contacts by relevance to the query.
+Use title, company, location, strength_score, and enrichment_snippet (seniority, industry, keywords, funding, etc.) when scoring.
+Prefer stronger lead scores and better enrichment matches when relevance is otherwise similar.
 For each contact provide: score (0-100), reason, warm_intro_path (array of names), recommended_action.
 Return JSON matching: { contacts: [...], summary: string, suggested_actions: string[] }`,
       },
@@ -122,6 +131,7 @@ export async function openaiGenerateOutreach(params: {
       {
         role: "system",
         content: `Generate a ${typeLabels[params.type]} with a ${params.tone} tone.
+Write like a sharp human. Do not use em dashes. Avoid stacked hyphenated buzzwords.
 Return JSON: { "subject": string (for emails), "body": string, "cta": string }`,
       },
       {
@@ -137,29 +147,22 @@ ${params.context ? `Context: ${params.context}` : ""}`,
   return JSON.parse(response.choices[0].message.content || "{}");
 }
 
-const CONTACT_SUMMARY_SYSTEM = `You write a straightforward third-person professional summary of a person.
-
-Style:
-- Start with the person's name, then who they are (role + company), like: "CJ is the Co-Founder and CEO of Diamond Kinetics."
-- Continue in natural third-person prose. Never write "this briefing", "this profile", "CRM", "relationship intelligence", "was added", "tagged", or "imported".
-- Use ONLY facts in the JSON. Do not invent details.
-- Prefer 2–4 short paragraphs, or one short paragraph plus a few "• " bullets for extra professional facts (industry, location, funding, seniority, etc.).
-- Cover useful career/company enrichment only.
-- Do NOT mention email, phone, LinkedIn, Twitter, websites, or that contact channels "are on file". Those appear elsewhere on the page.
-- Do NOT mention tags, import source, or how the record was created.
-- Plain text only. No markdown headings.`;
-
-export async function openaiGenerateContactSummary(contact: Record<string, unknown>): Promise<string> {
+export async function openaiGenerateContactSummary(
+  contact: ContactSummaryInput | Record<string, unknown>,
+): Promise<string> {
   if (!openai) throw new Error("OpenAI not configured");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: CONTACT_SUMMARY_SYSTEM },
-      { role: "user", content: JSON.stringify(contact) },
+      {
+        role: "user",
+        content: `Write a complete summary from this JSON only. Every sentence must finish with punctuation. Never end mid-phrase.\n${JSON.stringify(contact)}`,
+      },
     ],
-    max_tokens: 700,
-    temperature: 0.3,
+    max_tokens: 1200,
+    temperature: 0.2,
   });
 
   return response.choices[0].message.content?.trim() || "";

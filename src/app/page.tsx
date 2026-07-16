@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 const features = [
   {
     icon: Search,
-    title: "AI-powered search",
+    title: "AI search",
     description:
       "Ask natural language questions about your network. Find founders, CTOs, investors, and warm paths instantly.",
   },
@@ -73,7 +73,7 @@ export default function HomePage() {
             Built for relationship builders
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-foreground/90 sm:text-xl">
-            Turn your professional network into a strategic advantage with AI-powered search,
+            Turn your professional network into a strategic advantage with AI search,
             warm introductions, and outreach.
           </p>
           <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-4">

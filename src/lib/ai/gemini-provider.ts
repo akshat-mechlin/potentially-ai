@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI, SchemaType, type ResponseSchema } from "@google/generative-ai";
 import type { SearchResult, OutreachResult } from "@/types";
+import {
+  CONTACT_SUMMARY_SYSTEM,
+  type ContactSummaryInput,
+} from "@/lib/ai/contact-summary";
 import { parseModelJson } from "@/lib/ai/parse-model-json";
 import { outreachResultSchema, searchResultSchema } from "@/lib/ai/schemas";
 
@@ -103,11 +107,16 @@ export async function geminiRankAndExplain(
     title: string | null;
     email: string | null;
     company_name: string | null;
+    location?: string | null;
+    strength_score?: number;
+    enrichment_snippet?: string | null;
     similarity?: number;
   }>,
 ): Promise<SearchResult> {
   const model = getChatModel(
     `You are a relationship intelligence assistant. Rank contacts by relevance to the query.
+Use title, company, location, strength_score, and enrichment_snippet (seniority, industry, keywords, funding, etc.) when scoring.
+Prefer stronger lead scores and better enrichment matches when relevance is otherwise similar.
 For each contact provide: score (0-100), reason, warm_intro_path (array of names), recommended_action.
 Return JSON matching: { contacts: [...], summary: string, suggested_actions: string[] }`,
   );
@@ -165,6 +174,7 @@ export async function geminiGenerateOutreach(params: {
 
   const model = getChatModel(
     `Generate a ${typeLabels[params.type]} with a ${params.tone} tone.
+Write like a sharp human. Do not use em dashes. Avoid stacked hyphenated buzzwords.
 Return valid JSON only. Use \\n for line breaks inside the body string (no raw newlines inside JSON strings).
 Return JSON: { "subject": string (for emails), "body": string, "cta": string }`,
     outreachResponseSchema,
@@ -189,25 +199,17 @@ ${params.context ? `Context: ${params.context}` : ""}`,
   };
 }
 
-const CONTACT_SUMMARY_SYSTEM = `You write a straightforward third-person professional summary of a person.
-
-Style:
-- Start with the person's name, then who they are (role + company), like: "CJ is the Co-Founder and CEO of Diamond Kinetics."
-- Continue in natural third-person prose. Never write "this briefing", "this profile", "CRM", "relationship intelligence", "was added", "tagged", or "imported".
-- Use ONLY facts in the JSON. Do not invent details.
-- Prefer 2–4 short paragraphs, or one short paragraph plus a few "• " bullets for extra professional facts (industry, location, funding, seniority, etc.).
-- Cover useful career/company enrichment only.
-- Do NOT mention email, phone, LinkedIn, Twitter, websites, or that contact channels "are on file". Those appear elsewhere on the page.
-- Do NOT mention tags, import source, or how the record was created.
-- Plain text only. No markdown headings.`;
-
-export async function geminiGenerateContactSummary(contact: Record<string, unknown>): Promise<string> {
+export async function geminiGenerateContactSummary(
+  contact: ContactSummaryInput | Record<string, unknown>,
+): Promise<string> {
   const model = getClient().getGenerativeModel({
     model: GEMINI_CHAT_MODEL,
     systemInstruction: CONTACT_SUMMARY_SYSTEM,
-    generationConfig: { maxOutputTokens: 700, temperature: 0.3 },
+    generationConfig: { maxOutputTokens: 1200, temperature: 0.2 },
   });
 
-  const result = await model.generateContent(JSON.stringify(contact));
+  const result = await model.generateContent(
+    `Write a complete summary from this JSON only. Every sentence must finish with punctuation. Never end mid-phrase.\n${JSON.stringify(contact)}`,
+  );
   return result.response.text().trim();
 }

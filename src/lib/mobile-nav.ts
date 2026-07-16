@@ -50,6 +50,16 @@ export function getMobileBackLink(pathname: string): MobileBackLink | null {
     return { href: "/chats" };
   }
 
+  const docsMatch = pathname.match(/^\/docs\/([^/]+)$/);
+  if (docsMatch) {
+    return { href: "/docs" };
+  }
+
+  const workflowMatch = pathname.match(/^\/workflows\/([^/]+)$/);
+  if (workflowMatch) {
+    return { href: "/workflows" };
+  }
+
   return null;
 }
 
@@ -59,11 +69,16 @@ export function isImmersiveMobileRoute(pathname: string): boolean {
     pathname.includes("/prospects/") ||
     pathname.match(/^\/playbook-runs\/[^/]+$/) !== null ||
     pathname.match(/^\/playbooks\/[^/]+\/runs\/[^/]+$/) !== null ||
-    pathname.match(/^\/chats\/[^/]+$/) !== null
+    pathname.match(/^\/chats\/[^/]+$/) !== null ||
+    pathname.startsWith("/workflows")
   );
 }
 
 /** Hide the global app bar — screen provides its own native header. */
 export function shouldHideAppHeader(pathname: string): boolean {
-  return pathname.includes("/prospects/") || pathname.match(/^\/chats\/[^/]+$/) !== null;
+  return (
+    pathname.includes("/prospects/") ||
+    pathname.match(/^\/chats\/[^/]+$/) !== null ||
+    pathname.startsWith("/workflows")
+  );
 }

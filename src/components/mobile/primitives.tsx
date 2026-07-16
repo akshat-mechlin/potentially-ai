@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ChevronRight } from "lucide-react";
+import { InfoHint } from "@/components/playbooks/field-hint";
 import { cn } from "@/lib/utils";
 
 export {
@@ -42,7 +43,12 @@ export function MobileEmpty({ children }: { children: React.ReactNode }) {
 export function MobileKpiStrip({
   items,
 }: {
-  items: Array<{ label: string; value: string | number; icon?: LucideIcon }>;
+  items: Array<{
+    label: string;
+    value: string | number;
+    icon?: LucideIcon;
+    hint?: string;
+  }>;
 }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -56,6 +62,7 @@ export function MobileKpiStrip({
             <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {item.label}
             </span>
+            {item.hint ? <InfoHint label={item.label} hint={item.hint} /> : null}
           </div>
           <span className="text-lg font-semibold tabular-nums">{item.value}</span>
         </div>

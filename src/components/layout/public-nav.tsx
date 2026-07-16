@@ -26,7 +26,7 @@ export function PublicNav() {
       <div className="fixed top-0 z-50 w-full bg-primary py-2 text-center text-xs text-primary-foreground sm:text-sm">
         <span className="inline-flex items-center gap-1.5 px-4">
           <BrandMark className="h-4 w-4 text-primary-foreground" variant="mono" />
-          <span className="truncate">AI-powered relationship intelligence. Early access.</span>
+          <span className="truncate">Relationship intelligence for teams. Early access.</span>
         </span>
       </div>
 

@@ -262,11 +262,47 @@ export interface DashboardStats {
   activity?: Array<{ id: string; event: string; time: string; created_at: string }>;
 }
 
+export interface AnalyticsInsight {
+  id: string;
+  tone: "positive" | "warning" | "neutral";
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+}
+
 export interface AnalyticsData {
+  summary: {
+    contacts: number;
+    contacts_delta: number | null;
+    searches_7d: number;
+    searches_delta: number | null;
+    avg_strength: number;
+    stale_contacts: number;
+    pending_intros: number;
+    outreach_sent: number;
+    reply_rate: number | null;
+    booked: number;
+  };
   searches_per_day: { date: string; count: number }[];
-  top_contacts: { name: string; interactions: number }[];
+  top_contacts: {
+    id: string;
+    name: string;
+    interactions: number;
+    strength: number;
+    company: string | null;
+  }[];
   workspace_growth: { date: string; contacts: number }[];
   engagement: { type: string; count: number }[];
+  strength_distribution: {
+    key: "cold" | "warm" | "strong" | "champion";
+    label: string;
+    count: number;
+    color: string;
+  }[];
+  outreach_funnel: { stage: string; count: number }[];
+  intro_pipeline: { status: string; count: number }[];
+  insights: AnalyticsInsight[];
 }
 
 export * from "./playbooks";

@@ -150,7 +150,7 @@ export function StartRunForm({ playbookId, compact }: StartRunFormProps) {
         <CardTitle className="text-base">Start a new run</CardTitle>
         <CardDescription>
           Match contacts from a segment or all groups. You can review results on the run screen
-          immediately — no need to finish matching first.
+          immediately. No need to finish matching first.
         </CardDescription>
       </CardHeader>
       <CardContent>{inner}</CardContent>
