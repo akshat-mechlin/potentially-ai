@@ -12,7 +12,8 @@ export class PlanLimitError extends Error {
   }
 }
 
-export async function getEffectivePlan(supabase: SupabaseClient, userId: string) {
+export async function getEffectivePlan(supabase: SupabaseClient, _userId: string) {
+  void _userId;
   const workspaces = await listUserWorkspaces(supabase);
   const plans = workspaces.map((workspace) => normalizePlan(workspace.plan));
   if (plans.includes("enterprise")) return "enterprise" as const;

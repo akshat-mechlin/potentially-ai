@@ -41,7 +41,8 @@ const groupSchema = z.object({
   name: z.string().min(1, "Group name is required"),
 });
 
-function formatRole(role: string) {
+function formatRole(role: string | null | undefined) {
+  if (!role) return "Member";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
@@ -57,7 +58,7 @@ function GroupsPageContent() {
   const [inviteWorkspace, setInviteWorkspace] = useState<{ id: string; name: string } | null>(null);
   const { refreshWorkspaces } = useWorkspaces();
 
-  const { data: workspacesData, isLoading: workspacesLoading, refetch: refetchWorkspaces } = useQuery<{ workspaces: WorkspaceSummary[] }>({
+  const { data: workspacesData, isLoading: workspacesLoading } = useQuery<{ workspaces: WorkspaceSummary[] }>({
     queryKey: ["workspaces"],
     queryFn: () => fetch("/api/workspaces").then((r) => r.json()),
     enabled: mounted,

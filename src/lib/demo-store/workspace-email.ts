@@ -1,4 +1,4 @@
-import type { EmailSenderMode, SenderDomainStatus, WorkspaceEmailSettings } from "@/types";
+import type { EmailSenderMode, WorkspaceEmailSettings } from "@/types";
 import { getPlatformFromAddress } from "@/lib/email/from-address";
 
 const demoSettings: Omit<WorkspaceEmailSettings, "platformFromAddress" | "canEdit"> = {

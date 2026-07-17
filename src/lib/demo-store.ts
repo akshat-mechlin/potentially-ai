@@ -1,5 +1,5 @@
 import { DEMO_CONTACTS, DEMO_WORKSPACE } from "@/lib/demo-data";
-import type { Contact, Introduction, Workspace } from "@/types";
+import type { Contact, Introduction, Workspace, WorkspaceSummary } from "@/types";
 
 const extraContacts: Contact[] = [];
 let workspaces: Workspace[] = [DEMO_WORKSPACE];
@@ -156,8 +156,12 @@ export function filterContactsByQuery(query: string, contacts: Contact[]) {
   return contacts.slice(0, 5);
 }
 
-export function getDemoWorkspaces(): Workspace[] {
-  return workspaces;
+export function getDemoWorkspaces(): WorkspaceSummary[] {
+  return workspaces.map((workspace) => ({
+    ...workspace,
+    role: "owner",
+    member_count: workspace.id === DEMO_WORKSPACE.id ? 3 : 1,
+  }));
 }
 
 export function createDemoWorkspace(name: string): Workspace {

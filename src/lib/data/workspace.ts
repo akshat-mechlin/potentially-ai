@@ -1,4 +1,4 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { isDataDemoMode } from "@/lib/app-config";
 import { DEMO_WORKSPACE } from "@/lib/demo-data";
 import { safeGetSessionUser, type SessionUser } from "@/lib/supabase/auth";
