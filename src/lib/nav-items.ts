@@ -46,6 +46,7 @@ export const agentModeWorkflowItem = {
   href: "/workflows",
   label: "Workflows",
   icon: Workflow,
+  comingSoon: true,
 } satisfies AgentModeNavItem;
 
 /** Agent Mode (Playbooks pipeline). Shown indented under its own sidebar section. */

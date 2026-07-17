@@ -126,7 +126,16 @@ export function Sidebar() {
                   )}
                 >
                   <agentModeWorkflowItem.icon className="h-4 w-4 shrink-0" />
-                  {sidebarOpen && <span>{agentModeWorkflowItem.label}</span>}
+                  {sidebarOpen && (
+                    <>
+                      <span className="min-w-0 flex-1 truncate">{agentModeWorkflowItem.label}</span>
+                      {agentModeWorkflowItem.comingSoon ? (
+                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Coming soon
+                        </span>
+                      ) : null}
+                    </>
+                  )}
                 </Link>
               </div>
             </div>
