@@ -48,7 +48,8 @@ import {
 import type { WorkspaceDetail } from "@/lib/data/workspace-management";
 import { toast } from "sonner";
 
-function formatRole(role: string) {
+function formatRole(role: string | null | undefined) {
+  if (!role) return "Member";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 

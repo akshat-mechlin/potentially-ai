@@ -41,7 +41,8 @@ const groupSchema = z.object({
   name: z.string().min(1, "Group name is required"),
 });
 
-function formatRole(role: string) {
+function formatRole(role: string | null | undefined) {
+  if (!role) return "Member";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
