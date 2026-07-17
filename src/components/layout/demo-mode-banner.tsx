@@ -28,7 +28,7 @@ export function DemoModeBanner() {
         </span>
         {onProduction && (
           <p className="px-2 text-center text-[10px] text-destructive">
-            Production is in demo mode — rebuild with NEXT_PUBLIC_DEMO_MODE=false
+            Production is in demo mode. Rebuild with NEXT_PUBLIC_DEMO_MODE=false.
           </p>
         )}
       </div>

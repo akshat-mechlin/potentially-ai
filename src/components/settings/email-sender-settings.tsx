@@ -105,7 +105,7 @@ export function EmailSenderSettings({ compact = false }: EmailSenderSettingsProp
 
       if (saved.mode === "custom" && body.custom_sender_email !== undefined) {
         if (saved.senderDomainStatus === "verified") {
-          toast.success("Domain verified — ready to send from your address");
+          toast.success("Domain verified. Ready to send from your address.");
         } else if (saved.senderDomainStatus === "pending") {
           toast.message("Domain pending", {
             description: "Add DNS records below or finish setup in Resend.",
@@ -163,18 +163,18 @@ export function EmailSenderSettings({ compact = false }: EmailSenderSettingsProp
       if (action === "configure") {
         toast.success(
           updated.domainSetup.domainManagementAvailable
-            ? "Domain registered — add the DNS records below"
-            : "Domain setup started — finish verification in Resend",
+            ? "Domain registered. Add the DNS records below."
+            : "Domain setup started. Finish verification in Resend.",
         );
       } else if (action === "mark_verified") {
-        toast.success("Domain marked as verified — ready to send from your address");
+        toast.success("Domain marked as verified. Ready to send from your address.");
       } else {
         toast.success(
           updated.senderDomainStatus === "verified"
-            ? "Domain verified — ready to send from your address"
+            ? "Domain verified. Ready to send from your address."
             : updated.senderDomainStatus === "pending"
-              ? "Still waiting on DNS — we'll check again automatically"
-              : "Could not verify domain yet — confirm DNS records below",
+              ? "Still waiting on DNS. We'll check again automatically."
+              : "Could not verify domain yet. Confirm DNS records below.",
         );
       }
     } catch (error) {
@@ -401,7 +401,7 @@ export function EmailSenderSettings({ compact = false }: EmailSenderSettingsProp
             <p className="text-xs text-muted-foreground">
               We check Resend automatically when you open or save these settings. If the domain is
               already verified, you can send right away. Otherwise, add the DNS records below at your
-              domain provider — status refreshes every 30 seconds.
+              domain provider. Status refreshes every 30 seconds.
             </p>
             <div className="flex flex-wrap gap-2">
               {status === "not_started" && (

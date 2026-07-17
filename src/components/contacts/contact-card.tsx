@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MobileListTile } from "@/components/mobile/native-ui";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { contactCardHighlights } from "@/lib/contacts/enrichment";
 import { contactHref } from "@/lib/routes/contacts";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 
@@ -20,6 +21,8 @@ interface ContactCardProps {
 export function ContactCard({ contact, selectable, selected, onToggle }: ContactCardProps) {
   const { isMobileApp } = useMobileApp();
   const profileHref = contactHref(contact.id);
+  const highlights = contactCardHighlights(contact);
+  const subtitleBits = [contact.title, contact.company_name, highlights[0]].filter(Boolean);
 
   if (isMobileApp && !selectable) {
     return (
@@ -27,7 +30,7 @@ export function ContactCard({ contact, selectable, selected, onToggle }: Contact
         href={profileHref}
         leading={<span className="mobile-avatar-tile">{getInitials(contact.full_name)}</span>}
         title={contact.full_name}
-        subtitle={[contact.title, contact.company_name].filter(Boolean).join(" · ")}
+        subtitle={subtitleBits.join(" · ")}
         trailing={<span className="text-xs font-semibold text-primary">{contact.strength_score}%</span>}
       />
     );
@@ -50,7 +53,7 @@ export function ContactCard({ contact, selectable, selected, onToggle }: Contact
         <span className="mobile-avatar-tile">{getInitials(contact.full_name)}</span>
         <span className="mobile-tile-body">
           <span className="mobile-tile-title">{contact.full_name}</span>
-          <span className="mobile-tile-subtitle">{contact.company_name ?? contact.title}</span>
+          <span className="mobile-tile-subtitle">{subtitleBits.join(" · ")}</span>
         </span>
       </button>
     );
@@ -92,6 +95,18 @@ export function ContactCard({ contact, selectable, selected, onToggle }: Contact
             <p className="mt-1 text-xs text-muted-foreground">{contact.company_name}</p>
           )}
           {contact.email && <p className="mt-1 text-xs text-muted-foreground">{contact.email}</p>}
+          {highlights.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {highlights.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                >
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
           {contact.last_interaction_at && (
             <p className="mt-2 text-xs text-muted-foreground">
               Last contact {formatRelativeTime(contact.last_interaction_at)}

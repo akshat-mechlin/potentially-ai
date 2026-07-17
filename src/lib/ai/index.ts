@@ -4,6 +4,12 @@ import {
   withProviderFallback,
 } from "@/lib/ai/config";
 import {
+  buildFallbackContactSummary,
+  finalizeContactSummary,
+  shouldUseDeterministicSummary,
+  type ContactSummaryInput,
+} from "@/lib/ai/contact-summary";
+import {
   geminiGenerateContactSummary,
   geminiGenerateEmbedding,
   geminiGenerateOutreach,
@@ -66,6 +72,9 @@ export async function rankAndExplain(
     title: string | null;
     email: string | null;
     company_name: string | null;
+    location?: string | null;
+    strength_score?: number;
+    enrichment_snippet?: string | null;
     similarity?: number;
   }>,
 ): Promise<SearchResult> {
@@ -102,31 +111,21 @@ export async function generateOutreach(params: {
   }
 }
 
-export async function generateContactSummary(contact: {
-  full_name: string;
-  first_name?: string | null;
-  last_name?: string | null;
-  title: string | null;
-  company_name: string | null;
-  location?: string | null;
-  bio: string | null;
-  tags: string[];
-  enrichment?: Record<string, string>;
-}): Promise<string> {
+export async function generateContactSummary(
+  contact: ContactSummaryInput,
+): Promise<string> {
+  if (shouldUseDeterministicSummary(contact)) {
+    return buildFallbackContactSummary(contact);
+  }
+
   try {
-    return await runChat("generateContactSummary", {
+    const raw = await runChat("generateContactSummary", {
       openai: () => openaiGenerateContactSummary(contact),
       gemini: () => geminiGenerateContactSummary(contact),
     });
+    return finalizeContactSummary(raw, contact);
   } catch {
-    const role = contact.title || "a professional";
-    const company = contact.company_name ? ` of ${contact.company_name}` : "";
-    const location = contact.location ? ` Based in ${contact.location}.` : "";
-    const enrichmentBits = Object.entries(contact.enrichment ?? {})
-      .slice(0, 5)
-      .map(([k, v]) => `• ${k}: ${v}`);
-    const lead = `${contact.full_name} is the ${role}${company}.${location}`;
-    return [lead, ...enrichmentBits].join("\n");
+    return buildFallbackContactSummary(contact);
   }
 }
 

@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 function TemplateCreateForm({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
-  const [subject, setSubject] = useState("Quick intro — {{company}}");
+  const [subject, setSubject] = useState("Quick intro: {{company}}");
   const [body, setBody] = useState("Hi {{name}},\n\nWould love a brief intro call.");
   const [saving, setSaving] = useState(false);
 

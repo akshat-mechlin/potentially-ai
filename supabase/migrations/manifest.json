@@ -178,5 +178,23 @@
     "name": "profile_group_images_and_details",
     "file": "20260716120000_profile_group_images_and_details.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260717120000",
+    "name": "workflows",
+    "file": "20260717120000_workflows.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260717140000",
+    "name": "workflow_last_run",
+    "file": "20260717140000_workflow_last_run.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260717180000",
+    "name": "sync_source_outlook_mail",
+    "file": "20260717180000_sync_source_outlook_mail.sql",
+    "remote": "applied"
   }
 ]

@@ -64,12 +64,14 @@ interface UIState {
   compactMode: boolean;
   mobileMoreOpen: boolean;
   mobileHeaderTitle: string | null;
+  _hasHydrated: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setCommandMenuOpen: (open: boolean) => void;
   setCompactMode: (compact: boolean) => void;
   setMobileMoreOpen: (open: boolean) => void;
   setMobileHeaderTitle: (title: string | null) => void;
+  setHasHydrated: (hydrated: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -80,12 +82,14 @@ export const useUIStore = create<UIState>()(
       compactMode: false,
       mobileMoreOpen: false,
       mobileHeaderTitle: null,
+      _hasHydrated: false,
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setCommandMenuOpen: (open) => set({ commandMenuOpen: open }),
       setCompactMode: (compactMode) => set({ compactMode }),
       setMobileMoreOpen: (open) => set({ mobileMoreOpen: open }),
       setMobileHeaderTitle: (mobileHeaderTitle) => set({ mobileHeaderTitle }),
+      setHasHydrated: (_hasHydrated) => set({ _hasHydrated }),
     }),
     {
       name: "potentially-ui",
@@ -93,6 +97,9 @@ export const useUIStore = create<UIState>()(
         compactMode: state.compactMode,
         sidebarOpen: state.sidebarOpen,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

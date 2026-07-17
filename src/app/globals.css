@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -26,8 +27,11 @@
   --radius: 0.75rem;
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.35 0.03 145);
+  --sidebar-primary: oklch(0.42 0.06 145);
+  --sidebar-muted: oklch(0.45 0.02 280);
   --sidebar-accent: oklch(0.95 0.02 130);
   --sidebar-accent-foreground: oklch(0.32 0.04 145);
+  --sidebar-border: oklch(0.88 0.015 130);
   --sage: oklch(0.94 0.02 130);
   --forest: oklch(0.42 0.06 145);
   --cream: oklch(0.98 0.008 95);
@@ -66,8 +70,11 @@
   --ring: oklch(0.52 0.08 145);
   --sidebar: oklch(0.17 0.02 145);
   --sidebar-foreground: oklch(0.88 0.02 130);
+  --sidebar-primary: oklch(0.72 0.08 145);
+  --sidebar-muted: oklch(0.65 0.02 280);
   --sidebar-accent: oklch(0.24 0.02 145);
   --sidebar-accent-foreground: oklch(0.96 0.01 95);
+  --sidebar-border: oklch(0.28 0.02 145);
   --sage: oklch(0.26 0.02 145);
   --forest: oklch(0.52 0.08 145);
   --cream: oklch(0.16 0.02 145);
@@ -106,8 +113,11 @@
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
   --color-sage: var(--sage);
   --color-forest: var(--forest);
   --color-cream: var(--cream);
@@ -372,6 +382,48 @@ html.splash-dismissed .app-splash-static {
   flex: 1;
   flex-direction: column;
   min-height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px));
+}
+
+.app-main-workflow {
+  padding: 0 !important;
+}
+
+.app-page-workflow {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.workflow-playground,
+.workflow-canvas,
+.workflow-empty {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
+.workflow-canvas .react-flow__edge-path {
+  stroke-width: 1.75;
+}
+
+@media (min-width: 1024px) {
+  .app-main-workflow.app-main-immersive,
+  .app-main-workflow {
+    padding: 0 !important;
+  }
+
+  .app-page-workflow.app-page-immersive,
+  .app-page-workflow {
+    min-height: 100dvh !important;
+    height: 100dvh !important;
+    padding: 0 !important;
+  }
 }
 
 @media (min-width: 1024px) {

@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { DM_Serif_Display, Fira_Sans, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { SplashStatic } from "@/components/pwa/splash-static";
-import { SplashBootstrapScript } from "@/components/pwa/splash-bootstrap";
+import { SPLASH_BOOTSTRAP_SCRIPT } from "@/components/pwa/splash-bootstrap";
 import "./globals.css";
 
 const firaSans = Fira_Sans({
@@ -27,7 +28,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Potentially.ai | Relationship Intelligence",
   description:
-    "AI-powered relationship intelligence and warm-introduction platform. Search your network, discover opportunities, and get warm intros.",
+    "Relationship intelligence for warm introductions. Search your network, discover opportunities, and get warm intros.",
   applicationName: "Potentially",
   appleWebApp: {
     capable: true,
@@ -66,7 +67,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className={`${firaSans.className} antialiased`} suppressHydrationWarning>
-        <SplashBootstrapScript />
+        <Script
+          id="potentially-splash-bootstrap"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: SPLASH_BOOTSTRAP_SCRIPT }}
+        />
         <SplashStatic />
         <Providers>{children}</Providers>
       </body>

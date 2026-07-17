@@ -321,6 +321,21 @@ function mapRowsFromMatrix(matrix: string[][]): ContactImportRow[] {
     if (state) extras.state = state;
     if (country) extras.country = country;
 
+    // Preserve any unrecognized columns so nothing from the CSV is dropped
+    const usedIndices = new Set(columnMap.values());
+    headers.forEach((header, idx) => {
+      if (usedIndices.has(idx) || !header) return;
+      const value = (cols[idx] ?? "").trim();
+      if (!value) return;
+      const key = header
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, 64);
+      if (!key || extras[key]) return;
+      extras[key] = value;
+    });
+
     return [
       {
         full_name: full_name || email || "Unknown",

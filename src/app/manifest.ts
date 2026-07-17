@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Potentially | Relationship Intelligence",
     short_name: "Potentially",
     description:
-      "AI-powered relationship intelligence. Search your network, discover opportunities, and get warm intros.",
+      "Relationship intelligence for your network. Search contacts, discover opportunities, and get warm intros.",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

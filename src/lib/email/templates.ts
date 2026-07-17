@@ -119,7 +119,7 @@ function baseTemplate(content: AuthEmailContent) {
           <tr>
             <td style="padding:28px 12px 0;text-align:center;">
               <p style="margin:0;font-family:${FONT_SANS};font-size:12px;line-height:1.6;color:${COLORS.muted};">
-                AI-powered relationship intelligence
+                Relationship intelligence for teams
               </p>
               <p style="margin:6px 0 0;font-family:${FONT_SERIF};font-size:14px;font-weight:600;color:${COLORS.forest};letter-spacing:-0.01em;">
                 potentially.ai
@@ -140,7 +140,7 @@ export function signupVerificationEmail(name: string, actionLink: string) {
     banner: "Relationship intelligence for teams who value warm introductions",
     heading: "Welcome aboard",
     greeting: `Hi ${name},`,
-    body: "Thanks for joining Potentially. Confirm your email to unlock AI-powered search, warm introductions, and your relationship graph.",
+    body: "Thanks for joining Potentially. Confirm your email to unlock AI search, warm introductions, and your relationship graph.",
     ctaLabel: "Confirm email address",
     ctaUrl: actionLink,
     footerNote:

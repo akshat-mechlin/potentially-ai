@@ -80,7 +80,7 @@ export function formatOAuthError(error: unknown, connectorKey?: ConnectorKey): s
     if (normalized.includes("another user")) {
       return `${providerLabel} is already linked to a different Potentially user. Pick a different account, or sign in with that ${providerLabel} account instead.`;
     }
-    return `${providerLabel} is already linked to this user. Click Connect again — we'll re-prompt for access so tokens can be saved.`;
+    return `${providerLabel} is already linked to this user. Click Connect again and we'll ask for access so tokens can be saved.`;
   }
 
   return message;

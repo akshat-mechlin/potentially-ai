@@ -724,7 +724,7 @@ export async function generateProspectDrafts(runId: string, playbook: Playbook) 
           goal: playbook.goal ?? "Schedule a brief intro call",
           context: prospect.match_reason ?? undefined,
         });
-        subject = outreach.subject ?? `Quick intro — ${prospect.contact.full_name}`;
+        subject = outreach.subject ?? `Quick intro: ${prospect.contact.full_name}`;
         body = outreach.body;
       }
     } else {
@@ -737,7 +737,7 @@ export async function generateProspectDrafts(runId: string, playbook: Playbook) 
         goal: playbook.goal ?? "Schedule a brief intro call",
         context: prospect.match_reason ?? undefined,
       });
-      subject = outreach.subject ?? `Quick intro — ${prospect.contact.full_name}`;
+      subject = outreach.subject ?? `Quick intro: ${prospect.contact.full_name}`;
       body = outreach.body;
     }
 

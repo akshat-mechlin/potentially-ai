@@ -9,16 +9,25 @@ import type { SearchResultContact } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getInitials } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import { contactHref } from "@/lib/routes/contacts";
 import { toast } from "sonner";
 
 interface SearchResultCardProps {
   contact: SearchResultContact;
   index: number;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggle?: (contactId: string) => void;
 }
 
-export function SearchResultCard({ contact, index }: SearchResultCardProps) {
+export function SearchResultCard({
+  contact,
+  index,
+  selectable,
+  selected,
+  onToggle,
+}: SearchResultCardProps) {
   const router = useRouter();
   const [requestingIntro, setRequestingIntro] = useState(false);
 
@@ -47,8 +56,28 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
     >
-      <Card className="border-border transition-shadow hover:border-primary/20 hover:shadow-md">
+      <Card
+        className={cn(
+          "border-border transition-shadow",
+          selectable
+            ? selected
+              ? "border-primary shadow-md"
+              : "cursor-pointer hover:border-primary/30 hover:shadow-md"
+            : "hover:border-primary/20 hover:shadow-md",
+        )}
+        onClick={selectable ? () => onToggle?.(contact.id) : undefined}
+      >
         <CardContent className="flex items-start gap-4 p-4">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggle?.(contact.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-3 h-4 w-4 shrink-0 rounded border-border"
+              aria-label={`Select ${contact.full_name || "contact"}`}
+            />
+          )}
           <Avatar className="h-10 w-10">
             <AvatarFallback>{getInitials(contact.full_name ?? contact.email)}</AvatarFallback>
           </Avatar>
@@ -59,6 +88,7 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
                 <Link
                   href={contactHref(contact.id)}
                   className="font-medium hover:underline"
+                  onClick={(e) => selectable && e.stopPropagation()}
                 >
                   {contact.full_name || contact.email || "Unknown contact"}
                 </Link>
@@ -102,35 +132,37 @@ export function SearchResultCard({ contact, index }: SearchResultCardProps) {
               </div>
             )}
 
-            <div className="flex items-center gap-2 pt-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link href={contactHref(contact.id)}>
-                  View profile
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Link>
-              </Button>
-              {contact.email && (
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={contactHref(contact.id, "outreach")}>
-                    <Mail className="mr-1 h-3 w-3" />
-                    Email
+            {!selectable && (
+              <div className="flex items-center gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={contactHref(contact.id)}>
+                    View profile
+                    <ArrowRight className="ml-1 h-3 w-3" />
                   </Link>
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRequestIntro}
-                disabled={requestingIntro}
-              >
-                {requestingIntro ? (
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                ) : (
-                  <UserPlus className="mr-1 h-3 w-3" />
+                {contact.email && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={contactHref(contact.id, "outreach")}>
+                      <Mail className="mr-1 h-3 w-3" />
+                      Email
+                    </Link>
+                  </Button>
                 )}
-                Request intro
-              </Button>
-            </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRequestIntro}
+                  disabled={requestingIntro}
+                >
+                  {requestingIntro ? (
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  ) : (
+                    <UserPlus className="mr-1 h-3 w-3" />
+                  )}
+                  Request intro
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

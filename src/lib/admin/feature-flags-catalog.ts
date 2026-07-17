@@ -9,7 +9,7 @@ export const FEATURE_FLAG_CATALOG: Record<string, FeatureFlagDefinition> = {
   ai_search: {
     key: "ai_search",
     label: "AI search",
-    description: "AI-powered natural language search across your network",
+    description: "Natural language search across your network",
   },
   graph_view: {
     key: "graph_view",

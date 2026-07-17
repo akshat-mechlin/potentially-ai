@@ -67,7 +67,7 @@ export default function ProspectDetailPage() {
         { method: "POST" },
       );
       if (!res.ok) throw new Error("Failed");
-      toast.success("Meeting booked — follow-ups stopped");
+      toast.success("Meeting booked. Follow-ups stopped.");
       queryClient.invalidateQueries({ queryKey: ["prospect-search"] });
       queryClient.invalidateQueries({ queryKey: ["playbook-run", runId] });
       queryClient.invalidateQueries({ queryKey: ["prospect-thread", runId, prospectId] });

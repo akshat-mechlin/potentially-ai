@@ -1,4 +1,5 @@
 import type { Contact } from "@/types";
+import { contactEnrichmentBlob, metaValue } from "@/lib/contacts/enrichment";
 import type { IcpProfile, MatchingConfig, OutreachMode } from "@/types/playbooks";
 
 export type MatchResult = {
@@ -26,6 +27,8 @@ function countKeywordHits(contact: Contact, keywords: string[]) {
     contact.company_name,
     contact.email,
     contact.bio,
+    contact.location,
+    contactEnrichmentBlob(contact),
     ...(contact.tags ?? []),
   ]
     .map(normalize)
@@ -55,6 +58,19 @@ export function scoreContactForIcp(
       contact,
       score: 0,
       reason: "On do-not-contact list",
+      signals: ["suppressed"],
+      warmPath: [],
+      skipped: true,
+      skipReason: "do_not_contact",
+    };
+  }
+
+  const doNotCall = metaValue(contact, "do_not_call");
+  if (doNotCall && /^(true|yes|y|1)$/i.test(doNotCall)) {
+    return {
+      contact,
+      score: 0,
+      reason: "Marked do not call",
       signals: ["suppressed"],
       warmPath: [],
       skipped: true,
@@ -157,8 +173,13 @@ export function scoreContactForIcp(
     };
   }
 
-  if (icp.industries_include?.length && company) {
-    if (includesAny(company, icp.industries_include)) {
+  if (icp.industries_include?.length) {
+    const industryBlob = [
+      company,
+      normalize(metaValue(contact, "industry")),
+      normalize(metaValue(contact, "keywords")),
+    ].join(" ");
+    if (includesAny(industryBlob, icp.industries_include)) {
       score += 15;
       signals.push("industry_match");
     }

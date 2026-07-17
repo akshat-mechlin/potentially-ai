@@ -87,6 +87,14 @@ export function addContactsToDemoSegment(segmentId: string, contactIds: string[]
   segment.updated_at = new Date().toISOString();
 }
 
+export function setDemoSegmentContacts(segmentId: string, contactIds: string[]) {
+  const segment = segments.find((s) => s.id === segmentId);
+  if (!segment) return;
+  segment.contact_ids = [...new Set(contactIds)];
+  segment.contact_count = segment.contact_ids.length;
+  segment.updated_at = new Date().toISOString();
+}
+
 export function getDemoPlaybooks() {
   return playbooks;
 }

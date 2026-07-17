@@ -6,13 +6,15 @@ export type ContactDetailPoint = {
   value: string;
   href?: string;
   kind: "email" | "phone" | "link" | "text";
+  /** Plain-English explanation for complex field titles (shown via info icon). */
+  hint?: string;
 };
 
 const META_LABELS: Record<string, string> = {
-  company_name_for_emails: "Company name for emails",
+  company_name_for_emails: "Email company name",
   email_status: "Email status",
-  primary_email_source: "Primary email source",
-  primary_email_verification_source: "Email verification source",
+  primary_email_source: "Email source",
+  primary_email_verification_source: "Email verified via",
   email_confidence: "Email confidence",
   primary_email_catch_all_status: "Catch-all status",
   primary_email_last_verified_at: "Email last verified",
@@ -45,14 +47,71 @@ const META_LABELS: Record<string, string> = {
   annual_revenue: "Annual revenue",
   total_funding: "Total funding",
   latest_funding: "Latest funding",
-  latest_funding_amount: "Latest funding amount",
+  latest_funding_amount: "Latest funding $",
   last_raised_at: "Last raised at",
   subsidiary_of: "Subsidiary of",
   subsidiary_of_organization_id: "Subsidiary org ID",
   city: "City",
   state: "State",
   country: "Country",
+  naics_code: "NAICS code",
+  sic_code: "SIC code",
 };
+
+/** Hints for fields whose titles are jargon-heavy or easy to misread. */
+const DETAIL_HINTS: Record<string, string> = {
+  company_name_for_emails:
+    "Company name used when guessing or formatting email addresses (e.g. first@company.com).",
+  email_status:
+    "Whether the email looks valid, invalid, or unverified based on enrichment checks.",
+  primary_email_source:
+    "Where the primary email was found, for example a data provider, CRM, or public web.",
+  primary_email_verification_source:
+    "The service or method used to verify that this email address works.",
+  email_confidence:
+    "How likely the email is correct, usually shown as a percentage or score.",
+  primary_email_catch_all_status:
+    "Catch-all domains accept mail to any address, so individual emails can’t be fully verified.",
+  primary_email_last_verified_at: "When this email was last checked for validity.",
+  seniority: "Job level, for example entry, manager, director, VP, or C-level.",
+  departments: "Business function this person works in, such as Sales or Engineering.",
+  sub_departments: "More specific team within the broader department.",
+  contact_owner: "Teammate responsible for this contact in your CRM or source system.",
+  account_owner: "Teammate responsible for the company account.",
+  work_direct_phone: "This person’s direct desk line, not the main company switchboard.",
+  corporate_phone: "Main company phone number (reception / switchboard).",
+  company_phone: "Main phone number listed for the company.",
+  do_not_call: "Flag that this person should not be called.",
+  stage: "Where this contact sits in your sales or outreach pipeline.",
+  lists: "Named lists or segments this contact belongs to in the source system.",
+  last_contacted: "Date of the most recent outreach or conversation.",
+  employees: "Approximate number of people who work at the company.",
+  keywords: "Topics and themes associated with this person or their company.",
+  technologies: "Software and tools the company appears to use.",
+  annual_revenue: "Estimated yearly company revenue.",
+  total_funding: "All venture or private funding raised to date.",
+  latest_funding: "Most recent funding round type (Seed, Series A, and so on).",
+  latest_funding_amount: "Dollar size of the most recent funding round.",
+  last_raised_at: "Date of the most recent funding round.",
+  subsidiary_of: "Parent company this organization belongs to.",
+  subsidiary_of_organization_id: "Internal ID of the parent company in the data source.",
+  naics_code:
+    "North American Industry Classification System code. A standard code for the company’s industry.",
+  sic_code:
+    "Standard Industrial Classification code. An older industry code still used in some datasets.",
+};
+
+function hintForKey(key: string): string | undefined {
+  const raw = key.startsWith("meta_") ? key.slice(5) : key;
+  if (DETAIL_HINTS[raw]) return DETAIL_HINTS[raw];
+  const snake = raw
+    .replace(/[#]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  return DETAIL_HINTS[snake];
+}
 
 const SKIP_META = new Set([
   "import_batch_id",
@@ -160,6 +219,7 @@ export function buildContactDetailPoints(contact: Contact): ContactDetailPoint[]
       value,
       href: phoneHref(value),
       kind: "phone",
+      hint: hintForKey(key),
     });
   }
 
@@ -240,6 +300,7 @@ export function buildContactDetailPoints(contact: Contact): ContactDetailPoint[]
       label,
       value,
       kind: "text",
+      hint: hintForKey(key),
     });
   }
 

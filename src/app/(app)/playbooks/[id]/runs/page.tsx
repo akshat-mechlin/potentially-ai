@@ -24,7 +24,7 @@ export default function PlaybookRunsPage() {
           <>
             <h2 className="text-sm font-semibold">Run history ({data.runs.length})</h2>
             <p className="text-sm text-muted-foreground">
-              Click any run to review matches, drafts, approvals, and pipeline — even for past runs.
+              Click any run to review matches, drafts, approvals, and pipeline, including past runs.
             </p>
           </>
         )}

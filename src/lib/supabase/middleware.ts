@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest) {
     "/playbooks",
     "/segments",
     "/chats",
+    "/workflows",
   ];
 
   const isProtected = protectedPaths.some((path) =>

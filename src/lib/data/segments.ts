@@ -188,6 +188,31 @@ export async function removeContactsFromSegment(segmentId: string, contactIds: s
     .eq("id", segmentId);
 }
 
+export async function setSegmentContacts(segmentId: string, contactIds: string[]) {
+  if (isDataDemoMode()) {
+    const { setDemoSegmentContacts } = await import("@/lib/demo-store/playbooks");
+    setDemoSegmentContacts(segmentId, contactIds);
+    return;
+  }
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) throw new Error("Unauthorized");
+
+  await supabase.from("segment_contacts").delete().eq("segment_id", segmentId);
+
+  const unique = [...new Set(contactIds)];
+  if (unique.length) {
+    await supabase.from("segment_contacts").insert(
+      unique.map((contactId) => ({ segment_id: segmentId, contact_id: contactId })),
+    );
+  }
+
+  await supabase
+    .from("segments")
+    .update({ contact_count: unique.length, updated_at: new Date().toISOString() })
+    .eq("id", segmentId);
+}
+
 export async function deleteSegment(segmentId: string) {
   if (isDataDemoMode()) {
     deleteDemoSegment(segmentId);
