@@ -13,7 +13,7 @@ interface RunListProps {
   runs: PlaybookRun[];
 }
 
-export function RunList({ playbookId, runs }: RunListProps) {
+export function RunList({ runs }: RunListProps) {
   const { isMobileApp } = useMobileApp();
 
   if (!runs.length) {

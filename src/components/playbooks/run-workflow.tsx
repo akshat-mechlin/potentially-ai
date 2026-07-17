@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   CheckSquare,
   ChevronRight,
@@ -114,7 +114,6 @@ function ProspectLinkCard({
 export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
-  const queryClient = useQueryClient();
   const [selectedProspects, setSelectedProspects] = useState<Set<string>>(new Set());
   const [selectedSkipped, setSelectedSkipped] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);

@@ -28,7 +28,6 @@ export function useWorkspaces() {
   const queryClient = useQueryClient();
   const {
     currentWorkspace,
-    workspaces,
     setCurrentWorkspace,
     setWorkspaces,
     removeWorkspace,

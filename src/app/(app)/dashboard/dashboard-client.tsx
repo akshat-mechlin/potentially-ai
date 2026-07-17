@@ -6,7 +6,6 @@ import { ArrowRight, Search, Users } from "lucide-react";
 import { DashboardWidgets } from "@/components/dashboard/dashboard-widgets";
 import { FirstVisitTour } from "@/components/onboarding/first-visit-tour";
 import {
-  DesktopOnly,
   MobileEmpty,
   MobileListSection,
   MobileListTile,
@@ -55,7 +54,9 @@ export function DashboardClient() {
         {statsLoading ? (
           <Skeleton className="h-20 rounded-xl" />
         ) : stats ? (
-          <DashboardWidgets stats={stats} />
+          <div className="flex space-evenly stretch items-center">
+            <DashboardWidgets stats={stats} />
+          </div>
         ) : null}
 
         <MobileListSection title="Recent searches">
@@ -105,12 +106,7 @@ export function DashboardClient() {
         {(stats?.activity ?? []).length > 0 && (
           <MobileListSection title="Activity">
             {(stats?.activity ?? []).slice(0, 8).map((a) => (
-              <MobileListTile
-                key={a.id}
-                title={a.event}
-                subtitle={a.time}
-                chevron={false}
-              />
+              <MobileListTile key={a.id} title={a.event} subtitle={a.time} chevron={false} />
             ))}
           </MobileListSection>
         )}

@@ -49,8 +49,16 @@ const threadMessages: Record<
   Array<{ id: string; body: string; message_type: string; created_at: string }>
 > = {};
 
+function withoutContactIds<T extends { contact_ids: string[] }>(
+  item: T,
+): Omit<T, "contact_ids"> {
+  const copy = { ...item };
+  delete (copy as Partial<T>).contact_ids;
+  return copy as Omit<T, "contact_ids">;
+}
+
 export function getDemoSegments() {
-  return segments.map(({ contact_ids: _c, ...segment }) => segment);
+  return segments.map((segment) => withoutContactIds(segment));
 }
 
 export function createDemoSegment(name: string, description?: string, contactIds: string[] = []) {
@@ -205,8 +213,7 @@ export function getDemoSegmentContactIds(segmentId: string) {
 export function getDemoSegment(segmentId: string) {
   const segment = segments.find((s) => s.id === segmentId);
   if (!segment) return null;
-  const { contact_ids: _ids, ...rest } = segment;
-  return rest;
+  return withoutContactIds(segment);
 }
 
 export function updateDemoSegment(
@@ -218,8 +225,7 @@ export function updateDemoSegment(
   if (input.name !== undefined) segment.name = input.name;
   if (input.description !== undefined) segment.description = input.description;
   segment.updated_at = new Date().toISOString();
-  const { contact_ids: _ids, ...rest } = segment;
-  return rest;
+  return withoutContactIds(segment);
 }
 
 export function removeContactsFromDemoSegment(segmentId: string, contactIds: string[]) {

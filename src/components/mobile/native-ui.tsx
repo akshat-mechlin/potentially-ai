@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Loader2, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -227,7 +228,26 @@ export function MobileSearchBar({
         placeholder={placeholder}
         className="mobile-search-bar-input"
       />
-      {loading && <span className="mobile-search-bar-spinner" aria-hidden />}
+      {onSubmit ? (
+        <Button
+          type="button"
+          size="sm"
+          onClick={onSubmit}
+          disabled={loading}
+          className="mobile-search-bar-button shrink-0"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              Search
+            </>
+          )}
+        </Button>
+      ) : (
+        loading && <span className="mobile-search-bar-spinner" aria-hidden />
+      )}
     </div>
   );
 }

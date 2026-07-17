@@ -1,7 +1,6 @@
 import type { SearchResult, SearchResultContact, OutreachResult } from "@/types";
 import {
   type AIProvider,
-  isAIConfigured,
   withProviderFallback,
 } from "@/lib/ai/config";
 import {

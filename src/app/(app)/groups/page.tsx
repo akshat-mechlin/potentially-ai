@@ -57,7 +57,7 @@ function GroupsPageContent() {
   const [inviteWorkspace, setInviteWorkspace] = useState<{ id: string; name: string } | null>(null);
   const { refreshWorkspaces } = useWorkspaces();
 
-  const { data: workspacesData, isLoading: workspacesLoading, refetch: refetchWorkspaces } = useQuery<{ workspaces: WorkspaceSummary[] }>({
+  const { data: workspacesData, isLoading: workspacesLoading } = useQuery<{ workspaces: WorkspaceSummary[] }>({
     queryKey: ["workspaces"],
     queryFn: () => fetch("/api/workspaces").then((r) => r.json()),
     enabled: mounted,

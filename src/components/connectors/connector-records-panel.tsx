@@ -55,7 +55,10 @@ export function ConnectorRecordsPanel({
     key: selectionKey,
     ids: [],
   });
-  const selectedIds = selection.key === selectionKey ? selection.ids : [];
+  const selectedIds = useMemo(
+    () => (selection.key === selectionKey ? selection.ids : []),
+    [selection.key, selection.ids, selectionKey],
+  );
   const setSelectedIds = (next: string[] | ((prev: string[]) => string[])) => {
     setSelection((prev) => {
       const current = prev.key === selectionKey ? prev.ids : [];

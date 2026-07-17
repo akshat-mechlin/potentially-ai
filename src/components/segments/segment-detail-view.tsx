@@ -56,7 +56,7 @@ export function SegmentDetailView({ segmentId }: { segmentId: string }) {
   }, [data?.segment]);
 
   const segment = data?.segment;
-  const contacts = data?.contacts ?? [];
+  const contacts = useMemo(() => data?.contacts ?? [], [data?.contacts]);
 
   const isDirty =
     !!segment &&
