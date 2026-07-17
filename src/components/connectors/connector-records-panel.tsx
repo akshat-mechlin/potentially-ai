@@ -591,8 +591,16 @@ export function ConnectorRecordsPanel({
             <div className="hidden md:block">
               <div className="max-h-[min(70vh,40rem)] overflow-auto rounded-lg border border-border/70">
                 <table
-                  className="w-max min-w-full border-separate border-spacing-0 text-sm"
-                  style={{ minWidth: Math.max(720, columns.length * 148) }}
+                  className={cn(
+                    "border-separate border-spacing-0 text-sm",
+                    // Few columns: stretch to fill the panel. Many: grow and scroll horizontally.
+                    columns.length <= 6 ? "w-full table-fixed" : "w-max min-w-full",
+                  )}
+                  style={
+                    columns.length > 6
+                      ? { minWidth: Math.max(960, columns.length * 148) }
+                      : undefined
+                  }
                 >
                   <thead className="sticky top-0 z-30">
                     <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -614,8 +622,13 @@ export function ConnectorRecordsPanel({
                         <th
                           key={col.key}
                           className={cn(
-                            "whitespace-nowrap border-b border-border/60 px-4 py-3 font-medium",
+                            "border-b border-border/60 px-4 py-3 font-medium",
                             stickyHeaderBg,
+                            columns.length <= 6 ? "truncate" : "whitespace-nowrap",
+                            col.key === "full_name" && columns.length <= 6 && "w-[24%]",
+                            col.key === "email" && columns.length <= 6 && "w-[28%]",
+                            col.key === "title" && columns.length <= 6 && "w-[22%]",
+                            col.key === "company_name" && columns.length <= 6 && "w-[22%]",
                             index === 0 && "sticky left-10 z-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]",
                           )}
                         >
@@ -637,7 +650,7 @@ export function ConnectorRecordsPanel({
                         >
                           <td
                             className={cn(
-                              "sticky left-0 z-20 border-b border-border/40 px-4 py-3",
+                              "sticky left-0 z-20 w-10 border-b border-border/40 px-4 py-3",
                               stickyCellBg(selected),
                             )}
                           >
@@ -655,7 +668,7 @@ export function ConnectorRecordsPanel({
                               <td
                                 key={col.key}
                                 className={cn(
-                                  "max-w-[16rem] truncate border-b border-border/40 px-4 py-3",
+                                  "truncate border-b border-border/40 px-4 py-3",
                                   isName ? "font-medium text-foreground" : "text-muted-foreground",
                                   index === 0 &&
                                     cn(
