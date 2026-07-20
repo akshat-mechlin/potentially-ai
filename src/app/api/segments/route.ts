@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSegment, listSegments } from "@/lib/data/segments";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -11,6 +12,9 @@ const createSchema = z.object({
 
 export async function GET(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("playbook_mode", "Playbooks");
+    if (disabled) return disabled;
+
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get("workspace_id");
     const segments = await listSegments(workspaceId);
@@ -23,6 +27,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("playbook_mode", "Playbooks");
+    if (disabled) return disabled;
+
     const body = createSchema.parse(await request.json());
     const segment = await createSegment({
       name: body.name,

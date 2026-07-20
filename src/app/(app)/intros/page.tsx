@@ -27,9 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { FeatureDisabled } from "@/components/shared/feature-disabled";
+import { useOutreachEnabled } from "@/hooks/use-feature-flags";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import type { Contact, Introduction } from "@/types";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const statusConfig = {
   draft: { icon: Clock, label: "Draft", color: "text-muted-foreground" },
@@ -45,16 +48,27 @@ export default function IntrosPage() {
   const [submitting, setSubmitting] = useState(false);
   const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
+  const { enabled: outreachEnabled, loading: flagLoading } = useOutreachEnabled();
 
   const { data: introsData, isLoading } = useQuery<{ introductions: Introduction[] }>({
     queryKey: ["intros"],
     queryFn: () => fetch("/api/intros").then((r) => r.json()),
+    enabled: outreachEnabled,
   });
 
   const { data: contactsData } = useQuery<{ contacts: Contact[] }>({
     queryKey: ["contacts", "picker"],
     queryFn: () => fetch("/api/contacts?limit=500").then((r) => r.json()),
+    enabled: outreachEnabled,
   });
+
+  if (flagLoading) {
+    return <Skeleton className="h-40 rounded-2xl" />;
+  }
+
+  if (!outreachEnabled) {
+    return <FeatureDisabled title="Outreach / introductions" flag="outreach_engine" />;
+  }
 
   const handleRequest = async () => {
     if (!contactId) {

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { InteractiveMenu, type InteractiveMenuItem } from "@/components/ui/modern-mobile-menu";
 import { isAgentModePath, mobileTabItems, moreMenuItems } from "@/lib/nav-items";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { filterNavByFlags } from "@/lib/feature-gates";
 import { useUIStore } from "@/stores";
 
 interface MobileTabBarProps {
@@ -15,28 +17,31 @@ export function MobileTabBar({ hidden }: MobileTabBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { mobileMoreOpen, setMobileMoreOpen } = useUIStore();
+  const { data: flags } = useFeatureFlags();
+  const visibleTabs = useMemo(() => filterNavByFlags(mobileTabItems, flags), [flags]);
+  const visibleMore = useMemo(() => filterNavByFlags(moreMenuItems, flags), [flags]);
 
   const isMoreActive =
     isAgentModePath(pathname) ||
-    moreMenuItems.some((item) => pathname.startsWith(item.href));
+    visibleMore.some((item) => pathname.startsWith(item.href));
 
   const menuItems = useMemo<InteractiveMenuItem[]>(
     () => [
-      ...mobileTabItems.map((item) => ({
+      ...visibleTabs.map((item) => ({
         label: (item.shortLabel ?? item.label).toLowerCase(),
         icon: item.icon,
       })),
       { label: "more", icon: MoreHorizontal },
     ],
-    [],
+    [visibleTabs],
   );
 
   const activeIndex = useMemo(() => {
-    const tabIndex = mobileTabItems.findIndex((item) => pathname.startsWith(item.href));
+    const tabIndex = visibleTabs.findIndex((item) => pathname.startsWith(item.href));
     if (tabIndex >= 0) return tabIndex;
     if (isMoreActive) return menuItems.length - 1;
     return 0;
-  }, [isMoreActive, menuItems.length, pathname]);
+  }, [isMoreActive, menuItems.length, pathname, visibleTabs]);
 
   const handleItemClick = (index: number) => {
     if (index === menuItems.length - 1) {
@@ -44,7 +49,7 @@ export function MobileTabBar({ hidden }: MobileTabBarProps) {
       return;
     }
 
-    const item = mobileTabItems[index];
+    const item = visibleTabs[index];
     if (item) {
       router.push(item.href);
     }
@@ -58,7 +63,6 @@ export function MobileTabBar({ hidden }: MobileTabBarProps) {
         items={menuItems}
         activeIndex={activeIndex}
         onItemClick={handleItemClick}
-        accentColor="var(--primary)"
       />
     </div>
   );

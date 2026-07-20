@@ -12,6 +12,8 @@ import {
   supportsDirectConnectorOAuth,
 } from "@/lib/oauth/connector-oauth";
 import { createClient } from "@/lib/supabase/server";
+import { getAllFeatureFlags } from "@/lib/data/feature-flags";
+import { isConnectorAllowedByFlags } from "@/lib/feature-gates";
 
 function connectorsErrorRedirect(origin: string, message: string) {
   const url = new URL("/connectors", origin);
@@ -34,6 +36,11 @@ export async function GET(request: NextRequest) {
 
   if (def.availability === "coming_soon") {
     return connectorsErrorRedirect(origin, `${def.name} is coming soon.`);
+  }
+
+  const flags = await getAllFeatureFlags();
+  if (!isConnectorAllowedByFlags(def, flags)) {
+    return connectorsErrorRedirect(origin, `${def.name} is disabled by a feature flag.`);
   }
 
   const supabase = await createClient();

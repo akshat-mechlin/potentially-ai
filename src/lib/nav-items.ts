@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Library,
   Workflow,
+  LifeBuoy,
 } from "lucide-react";
 
 export interface NavItem {
@@ -62,6 +63,7 @@ export const resourcesNav = {
   label: "Resources",
   items: [
     { href: "/docs", label: "Documentation", icon: Library },
+    { href: "/support", label: "Support", icon: LifeBuoy },
   ] satisfies AgentModeNavItem[],
 };
 
@@ -87,10 +89,19 @@ export function isAgentModePath(pathname: string) {
 }
 
 export function isResourcesPath(pathname: string) {
-  return pathname === "/docs" || pathname.startsWith("/docs/");
+  return (
+    pathname === "/docs" ||
+    pathname.startsWith("/docs/") ||
+    pathname === "/support" ||
+    pathname.startsWith("/support/")
+  );
 }
 
 export function getPageTitle(pathname: string): string {
+  if (pathname === "/support" || pathname.startsWith("/support/")) {
+    return pathname === "/support" ? "Support" : "Ticket";
+  }
+
   if (isResourcesPath(pathname)) {
     if (pathname === "/docs" || pathname === "/docs/") return "Documentation";
     const slug = pathname.split("/").filter(Boolean)[1];

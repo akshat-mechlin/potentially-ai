@@ -196,5 +196,17 @@
     "name": "sync_source_outlook_mail",
     "file": "20260717180000_sync_source_outlook_mail.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260720100000",
+    "name": "support_tickets_and_user_feature_flags",
+    "file": "20260720100000_support_tickets_and_user_feature_flags.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260720120000",
+    "name": "support_ticket_attachments",
+    "file": "20260720120000_support_ticket_attachments.sql",
+    "remote": "applied"
   }
 ]

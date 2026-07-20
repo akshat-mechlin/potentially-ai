@@ -2,13 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AnalyticsDashboard } from "@/components/analytics/analytics-dashboard";
+import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAnalyticsEnabled } from "@/hooks/use-feature-flags";
+import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn } from "@/lib/utils";
 import type { AnalyticsData } from "@/types";
 
 export default function AnalyticsPage() {
+  const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
+  const { enabled, loading: flagsLoading } = useAnalyticsEnabled();
+
   const { data, isLoading, isError } = useQuery<AnalyticsData>({
     queryKey: ["analytics"],
     queryFn: async () => {
@@ -16,11 +22,16 @@ export default function AnalyticsPage() {
       if (!res.ok) throw new Error("Failed to load analytics");
       return res.json();
     },
+    enabled: mounted && enabled,
   });
+
+  if (mounted && !flagsLoading && !enabled) {
+    return <FeatureDisabled title="Analytics" flag="analytics" />;
+  }
 
   return (
     <div className={cn("space-y-4", isMobileApp ? "pb-4" : "lg:space-y-6")}>
-      {isLoading ? (
+      {isLoading || flagsLoading || !mounted ? (
         <div className="space-y-6">
           <div className="grid gap-3 grid-cols-2 xl:grid-cols-6">
             {Array.from({ length: 6 }).map((_, i) => (

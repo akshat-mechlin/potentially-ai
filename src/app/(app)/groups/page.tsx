@@ -34,6 +34,8 @@ import {
 import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { useTeamCollaborationEnabled } from "@/hooks/use-feature-flags";
+import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import type { WorkspaceSummary } from "@/types";
 import { toast } from "sonner";
 
@@ -57,17 +59,18 @@ function GroupsPageContent() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteWorkspace, setInviteWorkspace] = useState<{ id: string; name: string } | null>(null);
   const { refreshWorkspaces } = useWorkspaces();
+  const { enabled: teamEnabled, loading: flagLoading } = useTeamCollaborationEnabled();
 
   const { data: workspacesData, isLoading: workspacesLoading } = useQuery<{ workspaces: WorkspaceSummary[] }>({
     queryKey: ["workspaces"],
     queryFn: () => fetch("/api/workspaces").then((r) => r.json()),
-    enabled: mounted,
+    enabled: mounted && teamEnabled,
   });
 
   const { data: connectorsData } = useQuery({
     queryKey: ["connectors"],
     queryFn: () => fetch("/api/connectors").then((r) => r.json()),
-    enabled: mounted,
+    enabled: mounted && teamEnabled,
   });
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({
@@ -129,7 +132,11 @@ function GroupsPageContent() {
 
   const workspaces = workspacesData?.workspaces ?? [];
   const connectedCount = connectorsData?.stats?.connected ?? 0;
-  const loading = !mounted || workspacesLoading;
+  const loading = !mounted || workspacesLoading || flagLoading;
+
+  if (mounted && !flagLoading && !teamEnabled) {
+    return <FeatureDisabled title="Team collaboration" flag="team_collaboration" />;
+  }
 
   const createDialog = (
     <Dialog open={createOpen} onOpenChange={setCreateOpen}>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseSearchIntent, rankAndExplain } from "@/lib/ai/openai";
 import { PlanLimitError, assertSearchAllowed } from "@/lib/billing/enforce";
 import { saveSearchHistory, searchContactsForQuery } from "@/lib/data/contacts";
+import { featureDisabledResponse, isFeatureEnabled } from "@/lib/data/feature-flags";
 import { createClient } from "@/lib/supabase/server";
 import { safeGetSessionUser } from "@/lib/supabase/auth";
 
@@ -14,21 +15,16 @@ const searchSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("ai_search", "AI search");
+    if (disabled) return disabled;
+
     const body = await request.json();
     const { query, workspace_id: workspaceId, filters } = searchSchema.parse(body);
 
     const supabase = await createClient();
     const { user } = await safeGetSessionUser(supabase);
-    if (user) {
-      const { data: billingFlag } = await supabase
-        .from("feature_flags")
-        .select("enabled")
-        .eq("key", "billing_enforcement")
-        .maybeSingle();
-
-      if (billingFlag?.enabled !== false) {
-        await assertSearchAllowed(supabase, user.id);
-      }
+    if (user && (await isFeatureEnabled("billing_enforcement"))) {
+      await assertSearchAllowed(supabase, user.id);
     }
 
     const ownerId =

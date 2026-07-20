@@ -28,6 +28,7 @@ import {
   type ContactImportRow,
 } from "@/lib/csv/parse-contacts";
 import { cn } from "@/lib/utils";
+import { useCsvImportEnabled } from "@/hooks/use-feature-flags";
 import { toast } from "sonner";
 
 const TEMPLATE_URL = "/templates/contacts-template.csv";
@@ -129,6 +130,11 @@ export function CsvImportButton({
   const [isDragging, setIsDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
   const queryClient = useQueryClient();
+  const { enabled: csvImportEnabled, loading: flagLoading } = useCsvImportEnabled();
+
+  if (flagLoading || !csvImportEnabled) {
+    return null;
+  }
 
   const resetSelection = () => {
     setPrepared([]);

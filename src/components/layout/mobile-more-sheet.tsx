@@ -3,7 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useUIStore } from "@/stores";
 import { agentModeCoreItems, agentModeNav, agentModeWorkflowItem, moreMenuItems, resourcesNav } from "@/lib/nav-items";
-import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
+import { useFeatureFlags, usePlaybookEnabled } from "@/hooks/use-feature-flags";
+import { filterNavByFlags } from "@/lib/feature-gates";
 import {
   MobileBottomSheet,
   MobileListSection,
@@ -14,6 +15,8 @@ export function MobileMoreSheet() {
   const pathname = usePathname();
   const { mobileMoreOpen, setMobileMoreOpen } = useUIStore();
   const { enabled: agentModeEnabled } = usePlaybookEnabled();
+  const { data: flags } = useFeatureFlags();
+  const visibleMoreItems = filterNavByFlags(moreMenuItems, flags);
 
   const close = () => setMobileMoreOpen(false);
 
@@ -56,7 +59,7 @@ export function MobileMoreSheet() {
         </MobileListSection>
 
         <MobileListSection title="Menu">
-          {moreMenuItems.map((item) => (
+          {visibleMoreItems.map((item) => (
             <MobileListTile
               key={item.href}
               href={item.href}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createIntroduction, listIntroductions } from "@/lib/data/intros";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 const introSchema = z.object({
   target_contact_id: z.string().min(1),
@@ -9,6 +10,9 @@ const introSchema = z.object({
 
 export async function GET() {
   try {
+    const disabled = await featureDisabledResponse("outreach_engine", "Outreach engine");
+    if (disabled) return disabled;
+
     const introductions = await listIntroductions();
     return NextResponse.json({ introductions });
   } catch (error) {
@@ -19,6 +23,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("outreach_engine", "Outreach engine");
+    if (disabled) return disabled;
+
     const body = await request.json();
     const { target_contact_id, message } = introSchema.parse(body);
     const intro = await createIntroduction(target_contact_id, message);

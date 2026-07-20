@@ -3,7 +3,10 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { SearchInterface } from "@/components/search/search-interface";
+import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import { DesktopOnly } from "@/components/mobile/primitives";
+import { useAiSearchEnabled } from "@/hooks/use-feature-flags";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function SearchPageContent() {
   const searchParams = useSearchParams();
@@ -13,6 +16,16 @@ function SearchPageContent() {
 }
 
 export default function SearchPage() {
+  const { enabled, loading } = useAiSearchEnabled();
+
+  if (loading) {
+    return <Skeleton className="h-40 rounded-2xl" />;
+  }
+
+  if (!enabled) {
+    return <FeatureDisabled title="AI search" flag="ai_search" />;
+  }
+
   return (
     <div className="space-y-4 lg:space-y-6">
       <DesktopOnly>

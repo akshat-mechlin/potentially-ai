@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { createWorkflow, listWorkflows } from "@/lib/data/workflows";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 export async function GET() {
   try {
+    const disabled = await featureDisabledResponse("playbook_mode", "Playbooks");
+    if (disabled) return disabled;
+
     const workflows = await listWorkflows();
     return NextResponse.json({ workflows });
   } catch (error) {
@@ -13,6 +17,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("playbook_mode", "Playbooks");
+    if (disabled) return disabled;
+
     const body = (await request.json().catch(() => ({}))) as {
       name?: string;
       description?: string;

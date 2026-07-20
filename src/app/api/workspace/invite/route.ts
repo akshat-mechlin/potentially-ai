@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { inviteWorkspaceMember, inviteWorkspaceMembers } from "@/lib/data/workspace-team";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 const inviteSchema = z.object({
   email: z.string().email(),
@@ -24,6 +25,9 @@ function parseEmails(value: string | string[]) {
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("team_collaboration", "Team collaboration");
+    if (disabled) return disabled;
+
     const body = await request.json();
 
     if ("emails" in body) {

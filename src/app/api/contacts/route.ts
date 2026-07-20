@@ -8,6 +8,10 @@ import {
   type ContactExcludedStatus,
 } from "@/lib/data/contacts";
 import { markCustomDataImported } from "@/lib/data/connectors";
+import { featureDisabledResponse, isFeatureEnabled } from "@/lib/data/feature-flags";
+import { PlanLimitError, assertContactImportAllowed } from "@/lib/billing/enforce";
+import { createClient } from "@/lib/supabase/server";
+import { safeGetSessionUser } from "@/lib/supabase/auth";
 
 const optionalString = z.string().max(2000).optional().or(z.literal(""));
 
@@ -67,6 +71,9 @@ function parseBoolParam(value: string | undefined): boolean | undefined {
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("csv_import", "CSV import");
+    if (disabled) return disabled;
+
     const body = await request.json();
     const parsed = importSchema.parse(body);
     const contacts = parsed.contacts.map((c) => ({
@@ -82,6 +89,12 @@ export async function POST(request: Request) {
       location: clean(c.location),
       extras: c.extras,
     }));
+
+    const supabase = await createClient();
+    const { user } = await safeGetSessionUser(supabase);
+    if (user && (await isFeatureEnabled("billing_enforcement"))) {
+      await assertContactImportAllowed(supabase, user.id, contacts.length);
+    }
 
     const importBatchId =
       parsed.import_batch_id ??
@@ -110,6 +123,9 @@ export async function POST(request: Request) {
       message: `Imported ${result.imported} new and updated ${result.updated} contacts`,
     });
   } catch (error) {
+    if (error instanceof PlanLimitError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 402 });
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid CSV data" }, { status: 400 });
     }

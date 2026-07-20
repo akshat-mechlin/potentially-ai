@@ -9,6 +9,8 @@ import { ConnectorCard } from "@/components/connectors/connector-card";
 import { ConnectorSetupBanner } from "@/components/connectors/connector-setup-banner";
 import { DesktopOnly, MobileKpiStrip, MobileSectionLabel } from "@/components/mobile/primitives";
 import { useConnectorActions } from "@/hooks/use-connector-actions";
+import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { isConnectorAllowedByFlags } from "@/lib/feature-gates";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { connectConnector } from "@/lib/oauth/connect";
@@ -37,6 +39,7 @@ export function ConnectorDashboard() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const { data: flags } = useFeatureFlags();
 
   const { data, isLoading } = useQuery<ConnectorsResponse>({
     queryKey: ["connectors"],
@@ -86,6 +89,7 @@ export function ConnectorDashboard() {
   const filtered = useMemo(() => {
     const list = data?.connectors ?? [];
     return list.filter((c) => {
+      if (!isConnectorAllowedByFlags(c, flags)) return false;
       const matchesCategory = activeCategory === "all" || c.category === activeCategory;
       const q = search.trim().toLowerCase();
       const matchesSearch =
@@ -99,7 +103,7 @@ export function ConnectorDashboard() {
         );
       return matchesCategory && matchesSearch;
     });
-  }, [data?.connectors, activeCategory, search]);
+  }, [data?.connectors, activeCategory, search, flags]);
 
   const grouped = useMemo(() => {
     if (activeCategory !== "all") {

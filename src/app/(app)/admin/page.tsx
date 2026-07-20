@@ -97,12 +97,32 @@ export default function AdminPage() {
       if (!res.ok) throw new Error(body.error || "Failed to update flag");
       return body;
     },
-    onSuccess: () => {
-      invalidate();
-      toast.success("Feature flag updated");
+    onMutate: async ({ key, enabled }) => {
+      await queryClient.cancelQueries({ queryKey: ["admin"] });
+      const previous = queryClient.getQueryData<AdminData>(["admin"]);
+      queryClient.setQueryData<AdminData>(["admin"], (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          featureFlags: current.featureFlags.map((flag) =>
+            flag.key === key ? { ...flag, enabled } : flag,
+          ),
+        };
+      });
+      return { previous };
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update feature flag"),
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["admin"], context.previous);
+      toast.error(err instanceof Error ? err.message : "Failed to update feature flag");
+    },
+    onSuccess: () => toast.success("Feature flag updated"),
+    onSettled: () => {
+      void queryClient.refetchQueries({ queryKey: ["admin"] });
+    },
   });
+
+  const pendingFlagKey =
+    flagMutation.isPending && flagMutation.variables ? flagMutation.variables.key : null;
 
   const userMutation = useMutation({
     mutationFn: async ({ userId, is_admin }: { userId: string; is_admin: boolean }) => {
@@ -250,7 +270,7 @@ export default function AdminPage() {
           <FeatureFlagRow
             key={flag.key}
             flag={flag}
-            disabled={flagMutation.isPending}
+            disabled={pendingFlagKey === flag.key}
             onToggle={(enabled) => flagMutation.mutate({ key: flag.key, enabled })}
           />
         ))}

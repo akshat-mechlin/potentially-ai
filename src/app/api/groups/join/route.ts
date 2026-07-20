@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { joinWorkspaceFromInviteToken } from "@/lib/data/workspace-team";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 import { createClient } from "@/lib/supabase/server";
 
 const joinSchema = z.object({
@@ -9,6 +10,9 @@ const joinSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("team_collaboration", "Team collaboration");
+    if (disabled) return disabled;
+
     const body = await request.json();
     const { invite } = joinSchema.parse(body);
     const supabase = await createClient();

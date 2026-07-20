@@ -39,6 +39,7 @@ import { STRENGTH_SCORE_HINT } from "@/lib/contacts/enrichment";
 import type { ContactDetailPoint } from "@/lib/contacts/profile-details";
 import { ContactProfileSummary } from "@/components/contacts/contact-profile-summary";
 import { InfoHint } from "@/components/playbooks/field-hint";
+import { useOutreachEnabled } from "@/hooks/use-feature-flags";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -57,7 +58,10 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const searchParams = useSearchParams();
   const defaultTab: ContactTab = searchParams.get("tab") === "outreach" ? "outreach" : "overview";
   const { isMobileApp } = useMobileApp();
-  const [activeTab, setActiveTab] = useState<ContactTab>(defaultTab);
+  const { enabled: outreachEnabled } = useOutreachEnabled();
+  const [activeTab, setActiveTab] = useState<ContactTab>(
+    defaultTab === "outreach" && !outreachEnabled ? "overview" : defaultTab,
+  );
   const [outreachType, setOutreachType] = useState<"cold_email" | "warm_intro" | "linkedin">(
     "cold_email",
   );
@@ -282,7 +286,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
             options={[
               { value: "overview", label: "Overview" },
               { value: "timeline", label: "Timeline" },
-              { value: "outreach", label: "Outreach" },
+              ...(outreachEnabled ? [{ value: "outreach" as const, label: "Outreach" }] : []),
             ]}
           />
 
@@ -418,11 +422,14 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         </div>
       </div>
 
-      <Tabs defaultValue={defaultTab} key={defaultTab}>
+      <Tabs
+        value={activeTab === "outreach" && !outreachEnabled ? "overview" : activeTab}
+        onValueChange={(v) => setActiveTab(v as ContactTab)}
+      >
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="outreach">Outreach</TabsTrigger>
+          {outreachEnabled ? <TabsTrigger value="outreach">Outreach</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">

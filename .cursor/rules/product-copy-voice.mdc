@@ -1,0 +1,14 @@
+---
+description: Product copy voice — avoid AI-sounding dashes and hyphen stacks
+alwaysApply: true
+---
+
+# Product copy voice
+
+When writing or editing user-facing text (UI labels, toasts, tooltips, emails, marketing, AI prompts that generate user-visible prose):
+
+- Do **not** use em dashes (`—`) as sentence glue. Prefer a period, comma, colon, or a short new sentence.
+- Avoid stacked hyphenated buzzwords (`AI-powered`, `lead-quality`, `warm-introduction`, `end-to-end`) unless the hyphen is standard English (`C-level`, `co-founder`, `follow-up` as a noun).
+- Prefer plain wording: "AI search", "warm introductions", "relationship strength".
+- Empty-state placeholders like `—` in tables are fine.
+- Code comments may keep em dashes; product strings should not.

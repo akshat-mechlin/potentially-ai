@@ -14,7 +14,8 @@ import {
   navItems,
   resourcesNav,
 } from "@/lib/nav-items";
-import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
+import { useFeatureFlags, usePlaybookEnabled } from "@/hooks/use-feature-flags";
+import { filterNavByFlags } from "@/lib/feature-gates";
 import { useUIStore } from "@/stores";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -32,10 +33,12 @@ export function Sidebar() {
   const sidebarOpen = _hasHydrated ? sidebarOpenStored : true;
   const compactMode = _hasHydrated ? compactModeStored : false;
   const { enabled: agentModeEnabled } = usePlaybookEnabled();
+  const { data: flags } = useFeatureFlags();
   const expandedWidth = compactMode ? 224 : 256;
   const collapsedWidth = compactMode ? 56 : 64;
   const agentModeActive = isAgentModePath(pathname);
   const resourcesActive = isResourcesPath(pathname);
+  const visibleNavItems = filterNavByFlags(navItems, flags);
 
   return (
     <motion.aside
@@ -50,7 +53,7 @@ export function Sidebar() {
 
       <ScrollArea className="flex-1 py-3">
         <nav className="flex flex-col gap-1 px-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <Link

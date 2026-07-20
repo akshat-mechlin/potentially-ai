@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateOutreach } from "@/lib/ai/openai";
 import { getContact } from "@/lib/data/contacts";
+import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 const outreachSchema = z.object({
   contact_id: z.string(),
@@ -13,6 +14,9 @@ const outreachSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const disabled = await featureDisabledResponse("outreach_engine", "Outreach engine");
+    if (disabled) return disabled;
+
     const body = await request.json();
     const params = outreachSchema.parse(body);
 
