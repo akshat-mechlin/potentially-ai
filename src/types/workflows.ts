@@ -59,6 +59,52 @@ export interface WorkflowLastRun {
   dry_run: boolean;
   warnings: string[];
   planned_actions: string[];
+  node_progress?: WorkflowNodeProgress[];
+  matches_preview?: WorkflowRunMatchPreview[];
+  stats?: WorkflowRunStats;
+  notify_sent?: boolean;
+  delay?: { amount: number; unit: string } | null;
+  trigger_mode?: WorkflowTriggerMode;
+  /** Cron marked this workflow due; cleared after the next run. */
+  schedule_due?: boolean;
+  /** Short waits pause deploy until this timestamp. */
+  wait_until?: string | null;
+  wait_status?: "waiting" | "resumed" | null;
+  email_count?: number;
+  intro_count?: number;
+  intro_ids?: string[];
+  branch?: {
+    true_count: number;
+    false_count: number;
+  };
+}
+
+export type WorkflowNodeRunStatus = "pending" | "running" | "done" | "skipped" | "waiting";
+
+export interface WorkflowNodeProgress {
+  node_id: string;
+  kind: WorkflowNodeKind;
+  status: WorkflowNodeRunStatus;
+  detail?: string;
+}
+
+export interface WorkflowRunMatchPreview {
+  contact_id: string;
+  full_name: string | null;
+  email: string | null;
+  company_name: string | null;
+  score: number;
+  match_reason?: string | null;
+}
+
+export interface WorkflowRunStats {
+  matched: number;
+  selected: number;
+  drafted: number;
+  sent: number;
+  replied: number;
+  booked: number;
+  skipped: number;
 }
 
 export interface Workflow {

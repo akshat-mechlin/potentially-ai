@@ -11,8 +11,18 @@ import {
 } from "@/lib/demo-store/playbooks";
 import { getContactsByIds } from "@/lib/data/contacts";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
+import type { WorkflowActor } from "@/lib/workflows/actor";
 import type { Contact } from "@/types";
 import type { Segment } from "@/types/playbooks";
+
+async function resolveSegmentClient(actor?: WorkflowActor | null) {
+  if (actor) {
+    return { supabase: actor.supabase, userId: actor.userId, workspaceId: actor.workspaceId };
+  }
+  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
+  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  return { supabase, userId: user.id, workspaceId };
+}
 
 export async function listSegments(workspaceId?: string | null): Promise<Segment[]> {
   if (isDataDemoMode()) return getDemoSegments();
@@ -31,24 +41,35 @@ export async function listSegments(workspaceId?: string | null): Promise<Segment
   return (data ?? []) as Segment[];
 }
 
-export async function createSegment(input: {
-  name: string;
-  description?: string;
-  contactIds?: string[];
-  workspaceId?: string | null;
-}) {
+export async function createSegment(
+  input: {
+    name: string;
+    description?: string;
+    contactIds?: string[];
+    workspaceId?: string | null;
+  },
+  actor?: WorkflowActor | null,
+) {
   if (isDataDemoMode()) {
     return createDemoSegment(input.name, input.description, input.contactIds ?? []);
   }
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext(undefined, input.workspaceId);
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  const ctx = actor
+    ? { supabase: actor.supabase, userId: actor.userId, workspaceId: actor.workspaceId }
+    : await (async () => {
+        const { supabase, user, workspaceId } = await getUserWorkspaceContext(
+          undefined,
+          input.workspaceId,
+        );
+        if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+        return { supabase, userId: user.id, workspaceId };
+      })();
 
-  const { data: segment, error } = await supabase
+  const { data: segment, error } = await ctx.supabase
     .from("segments")
     .insert({
-      workspace_id: workspaceId,
-      created_by: user.id,
+      workspace_id: ctx.workspaceId,
+      created_by: ctx.userId,
       name: input.name,
       description: input.description ?? null,
       contact_count: input.contactIds?.length ?? 0,
@@ -59,7 +80,7 @@ export async function createSegment(input: {
   if (error) throw error;
 
   if (input.contactIds?.length) {
-    await supabase.from("segment_contacts").insert(
+    await ctx.supabase.from("segment_contacts").insert(
       input.contactIds.map((contactId) => ({
         segment_id: segment.id,
         contact_id: contactId,
@@ -70,10 +91,15 @@ export async function createSegment(input: {
   return segment as Segment;
 }
 
-export async function getSegment(segmentId: string): Promise<Segment | null> {
+export async function getSegment(
+  segmentId: string,
+  actor?: WorkflowActor | null,
+): Promise<Segment | null> {
   if (isDataDemoMode()) return getDemoSegment(segmentId);
 
-  const { supabase } = await getUserWorkspaceContext();
+  const { supabase } = actor
+    ? { supabase: actor.supabase }
+    : await getUserWorkspaceContext();
   if (!supabase) return null;
 
   const { data, error } = await supabase.from("segments").select("*").eq("id", segmentId).maybeSingle();
@@ -97,11 +123,11 @@ export async function getSegmentWithContacts(segmentId: string): Promise<{
 export async function updateSegment(
   segmentId: string,
   input: { name?: string; description?: string | null },
+  actor?: WorkflowActor | null,
 ): Promise<Segment | null> {
   if (isDataDemoMode()) return updateDemoSegment(segmentId, input);
 
-  const { supabase } = await getUserWorkspaceContext();
-  if (!supabase) throw new Error("Unauthorized");
+  const { supabase } = await resolveSegmentClient(actor);
 
   const patch: Record<string, string | null> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) patch.name = input.name;
@@ -188,23 +214,31 @@ export async function removeContactsFromSegment(segmentId: string, contactIds: s
     .eq("id", segmentId);
 }
 
-export async function setSegmentContacts(segmentId: string, contactIds: string[]) {
+export async function setSegmentContacts(
+  segmentId: string,
+  contactIds: string[],
+  actor?: WorkflowActor | null,
+) {
   if (isDataDemoMode()) {
     const { setDemoSegmentContacts } = await import("@/lib/demo-store/playbooks");
     setDemoSegmentContacts(segmentId, contactIds);
     return;
   }
 
-  const { supabase } = await getUserWorkspaceContext();
-  if (!supabase) throw new Error("Unauthorized");
+  const { supabase } = await resolveSegmentClient(actor);
 
   await supabase.from("segment_contacts").delete().eq("segment_id", segmentId);
 
   const unique = [...new Set(contactIds)];
   if (unique.length) {
-    await supabase.from("segment_contacts").insert(
-      unique.map((contactId) => ({ segment_id: segmentId, contact_id: contactId })),
-    );
+    const CHUNK = 200;
+    for (let i = 0; i < unique.length; i += CHUNK) {
+      const slice = unique.slice(i, i + CHUNK);
+      const { error } = await supabase.from("segment_contacts").insert(
+        slice.map((contactId) => ({ segment_id: segmentId, contact_id: contactId })),
+      );
+      if (error) throw error;
+    }
   }
 
   await supabase

@@ -94,22 +94,43 @@ export function NodeConfigPanel({
         </div>
 
         {kind === "trigger" && (
-          <div className="space-y-1.5">
-            <Label className="text-muted-foreground">When to start</Label>
-            <Select
-              value={String(config.mode ?? "manual")}
-              onValueChange={(value) => patchConfig({ mode: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual run</SelectItem>
-                <SelectItem value="schedule">Schedule</SelectItem>
-                <SelectItem value="new_contact">New contact added</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">When to start</Label>
+              <Select
+                value={String(config.mode ?? "manual")}
+                onValueChange={(value) => patchConfig({ mode: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual run</SelectItem>
+                  <SelectItem value="schedule">Schedule</SelectItem>
+                  <SelectItem value="new_contact">New contact added</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {String(config.mode ?? "manual") === "schedule" ? (
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground">How often</Label>
+                <Select
+                  value={String(config.interval ?? "daily")}
+                  onValueChange={(value) => patchConfig({ interval: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hourly">Every hour</SelectItem>
+                    <SelectItem value="every_6_hours">Every 6 hours</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </>
         )}
 
         {kind === "icp" && (

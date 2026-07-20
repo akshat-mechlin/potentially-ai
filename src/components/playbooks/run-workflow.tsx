@@ -33,6 +33,8 @@ type RunDetailResponse = {
 interface RunWorkflowProps {
   playbookId: string;
   runId: string;
+  /** Compact layout for embedding inside Workflows. */
+  embedded?: boolean;
 }
 
 function EmptySection({
@@ -111,9 +113,10 @@ function ProspectLinkCard({
   );
 }
 
-export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
+export function RunWorkflow({ playbookId, runId, embedded = false }: RunWorkflowProps) {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
+  const compact = embedded || isMobileApp;
   const [selectedProspects, setSelectedProspects] = useState<Set<string>>(new Set());
   const [selectedSkipped, setSelectedSkipped] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
@@ -297,9 +300,9 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
   const run = data.run;
 
   return (
-    <div className={cn(isMobileApp ? "space-y-4 px-3 pb-4" : "space-y-6")}>
-      <div className={cn(isMobileApp ? "flex flex-wrap gap-2" : "")}>
-        {isMobileApp ? (
+    <div className={cn(compact ? "space-y-3" : "space-y-6")}>
+      <div className={cn(compact ? "flex flex-wrap gap-2" : "")}>
+        {compact ? (
           <>
             <Badge variant="outline">{run.status}</Badge>
             {run.dry_run && <Badge variant="secondary">dry</Badge>}
@@ -327,17 +330,17 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       <section className="mobile-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="mobile-section-label">
-            {isMobileApp ? `Matched · ${matchedProspects.length}` : `1. Matched prospects (${matchedProspects.length})`}
+            {compact ? `Matched · ${matchedProspects.length}` : `1. Matched prospects (${matchedProspects.length})`}
           </p>
           {matchedProspects.length > 0 && (
             <Button
               size="sm"
               onClick={finalizeSelection}
               disabled={!selectedProspects.size || busy === "finalize"}
-              className={isMobileApp ? "h-8 rounded-full px-3 text-xs" : ""}
+              className={compact ? "h-8 rounded-full px-3 text-xs" : ""}
             >
               <CheckSquare className="mr-1 h-3.5 w-3.5" />
-              {isMobileApp ? `Select (${selectedProspects.size})` : `Finalize ${selectedProspects.size} selected`}
+              {compact ? `Select (${selectedProspects.size})` : `Finalize ${selectedProspects.size} selected`}
             </Button>
           )}
         </div>
@@ -347,7 +350,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
               <ProspectLinkCard
                 playbookId={playbookId}
                 prospect={prospect}
-                mobile={isMobileApp}
+                mobile={compact}
                 trailing={
                   <input
                     type="checkbox"
@@ -366,16 +369,16 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
             icon={Users}
             title="No matches"
             description="This run has no matches yet, or all matches were already moved forward."
-            compact={isMobileApp}
+            compact={compact}
           />
         )}
       </section>
 
-      {(skippedProspects.length > 0 || !isMobileApp) && (
+      {(skippedProspects.length > 0 || !compact) && (
       <section className="mobile-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="mobile-section-label">
-            {isMobileApp ? `Skipped · ${skippedProspects.length}` : `Skipped / deduped (${skippedProspects.length})`}
+            {compact ? `Skipped · ${skippedProspects.length}` : `Skipped / deduped (${skippedProspects.length})`}
           </p>
           {skippedProspects.length > 0 && (
             <Button
@@ -383,10 +386,10 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
               variant="outline"
               onClick={includeSkippedSelection}
               disabled={!selectedSkipped.size || busy === "include-skipped"}
-              className={isMobileApp ? "h-8 rounded-full px-3 text-xs" : ""}
+              className={compact ? "h-8 rounded-full px-3 text-xs" : ""}
             >
               <CheckSquare className="mr-1 h-3.5 w-3.5" />
-              {isMobileApp
+              {compact
                 ? `Include (${selectedSkipped.size})`
                 : `Include ${selectedSkipped.size} in run`}
             </Button>
@@ -398,7 +401,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
               <ProspectLinkCard
                 playbookId={playbookId}
                 prospect={prospect}
-                mobile={isMobileApp}
+                mobile={compact}
                 trailing={
                   <>
                     <Badge variant="secondary">{prospect.skip_reason ?? "skipped"}</Badge>
@@ -416,7 +419,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
             </div>
           ))
         ) : (
-          !isMobileApp && (
+          !compact && (
             <EmptySection
               icon={Users}
               title="No skipped contacts"
@@ -430,23 +433,23 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       <section className="mobile-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="mobile-section-label">
-            {isMobileApp ? `Drafts · ${selectedCount}` : `2. Generate drafts (${selectedCount} ready)`}
+            {compact ? `Drafts · ${selectedCount}` : `2. Generate drafts (${selectedCount} ready)`}
           </p>
           <Button
             onClick={generateDrafts}
             disabled={selectedCount === 0 || busy === "drafts"}
             size="sm"
-            className={isMobileApp ? "h-8 rounded-full px-3 text-xs" : ""}
+            className={compact ? "h-8 rounded-full px-3 text-xs" : ""}
           >
             {busy === "drafts" ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : (
               <Sparkles className="mr-1 h-3.5 w-3.5" />
             )}
-            {isMobileApp ? "Generate" : "Generate email drafts"}
+            {compact ? "Generate" : "Generate email drafts"}
           </Button>
         </div>
-        {selectedCount === 0 && !isMobileApp && (
+        {selectedCount === 0 && !compact && (
           <EmptySection
             icon={Sparkles}
             title="No prospects finalized yet"
@@ -458,10 +461,10 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
       <section className="mobile-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="mobile-section-label">
-            {isMobileApp ? `Send · ${pendingApproval.length}` : `3. Approve & send (${pendingApproval.length})`}
+            {compact ? `Send · ${pendingApproval.length}` : `3. Approve & send (${pendingApproval.length})`}
           </p>
           {pendingApproval.length > 0 && (
-            <Button size="sm" variant="outline" onClick={bulkSend} disabled={busy === "bulk"} className={isMobileApp ? "h-8 rounded-full px-3 text-xs" : ""}>
+            <Button size="sm" variant="outline" onClick={bulkSend} disabled={busy === "bulk"} className={compact ? "h-8 rounded-full px-3 text-xs" : ""}>
               Approve all
             </Button>
           )}
@@ -473,7 +476,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
               body: prospect.draft_body ?? "",
             };
             return (
-              <Card key={prospect.id} className={isMobileApp ? "mobile-card-flat border-0 shadow-none" : ""}>
+              <Card key={prospect.id} className={compact ? "mobile-card-flat border-0 shadow-none" : ""}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="text-base">
@@ -484,7 +487,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
                         {prospect.contact?.full_name}
                       </Link>
                     </CardTitle>
-                    {!isMobileApp && (
+                    {!compact && (
                       <Badge variant="outline">
                         <Mail className="mr-1 h-3 w-3" />
                         pending approval
@@ -494,13 +497,13 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Input value={edit.subject} onChange={(e) => setDraftEdits((prev) => ({ ...prev, [prospect.id]: { ...edit, subject: e.target.value } }))} />
-                  <Textarea value={edit.body} onChange={(e) => setDraftEdits((prev) => ({ ...prev, [prospect.id]: { ...edit, body: e.target.value } }))} rows={isMobileApp ? 4 : 6} />
+                  <Textarea value={edit.body} onChange={(e) => setDraftEdits((prev) => ({ ...prev, [prospect.id]: { ...edit, body: e.target.value } }))} rows={compact ? 4 : 6} />
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => sendProspect(prospect.id)} disabled={busy === prospect.id} className={isMobileApp ? "flex-1 rounded-xl" : ""}>
+                    <Button size="sm" onClick={() => sendProspect(prospect.id)} disabled={busy === prospect.id} className={compact ? "flex-1 rounded-xl" : ""}>
                       {busy === prospect.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                       Send
                     </Button>
-                    {!isMobileApp && (
+                    {!compact && (
                       <Button size="sm" variant="outline" asChild>
                         <Link href={`/playbooks/${playbookId}/prospects/${prospect.id}`}>Open conversation</Link>
                       </Button>
@@ -511,7 +514,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
             );
           })
         ) : (
-          !isMobileApp && (
+          !compact && (
             <EmptySection icon={Mail} title="Nothing waiting for approval" description="Generate drafts first, then review and send emails here." />
           )
         )}
@@ -519,7 +522,7 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
 
       <section className="mobile-section">
         <p className="mobile-section-label">
-          {isMobileApp ? `Pipeline · ${pipelineProspects.length}` : `4. Pipeline (${pipelineProspects.length})`}
+          {compact ? `Pipeline · ${pipelineProspects.length}` : `4. Pipeline (${pipelineProspects.length})`}
         </p>
         {pipelineProspects.length ? (
           pipelineProspects.map((prospect) => (
@@ -527,12 +530,12 @@ export function RunWorkflow({ playbookId, runId }: RunWorkflowProps) {
               key={prospect.id}
               playbookId={playbookId}
               prospect={prospect}
-              mobile={isMobileApp}
+              mobile={compact}
               trailing={<Badge variant="outline">{prospect.status}</Badge>}
             />
           ))
         ) : (
-          !isMobileApp && (
+          !compact && (
             <EmptySection icon={Send} title="No active pipeline yet" description="Sent, replied, booked, and queued prospects show up here." />
           )
         )}

@@ -5,6 +5,7 @@ import {
   getDemoIntroductions,
 } from "@/lib/demo-store";
 import type { Contact, Introduction } from "@/types";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getUserWorkspaceContext, listUserWorkspaces } from "./workspace";
 
 export async function listIntroductions(): Promise<Introduction[]> {
@@ -50,6 +51,7 @@ export async function listIntroductions(): Promise<Introduction[]> {
 export async function createIntroduction(
   targetContactId: string,
   message?: string,
+  asAdmin?: { supabase: ReturnType<typeof createAdminClient>; userId: string; workspaceId?: string },
 ): Promise<Introduction> {
   if (isDataDemoMode()) {
     const contact = getDemoContactById(targetContactId);
@@ -60,8 +62,10 @@ export async function createIntroduction(
     return intro;
   }
 
-  const { supabase, user } = await getUserWorkspaceContext();
-  if (!supabase || !user) throw new Error("Unauthorized");
+  const session = asAdmin ? null : await getUserWorkspaceContext();
+  const supabase = asAdmin?.supabase ?? session?.supabase;
+  const userId = asAdmin?.userId ?? session?.user?.id;
+  if (!supabase || !userId) throw new Error("Unauthorized");
 
   const { data: contact } = await supabase
     .from("contacts")
@@ -71,13 +75,13 @@ export async function createIntroduction(
 
   if (!contact) throw new Error("Contact not found");
 
-  const workspaceId = contact.workspace_id as string;
+  const workspaceId = (asAdmin?.workspaceId ?? contact.workspace_id) as string;
 
   const { data, error } = await supabase
     .from("introductions")
     .insert({
       workspace_id: workspaceId,
-      requester_id: user.id,
+      requester_id: userId,
       target_contact_id: targetContactId,
       status: "requested",
       message: message ?? null,
@@ -90,7 +94,7 @@ export async function createIntroduction(
   const fullContact = await supabase.from("contacts").select("*").eq("id", targetContactId).single();
 
   await supabase.from("notifications").insert({
-    user_id: user.id,
+    user_id: userId,
     workspace_id: workspaceId,
     title: "Introduction requested",
     message: `You requested an introduction to ${contact.full_name}`,

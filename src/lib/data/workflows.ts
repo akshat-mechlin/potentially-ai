@@ -63,13 +63,19 @@ export async function listWorkflows(): Promise<WorkflowListItem[]> {
   }));
 }
 
-export async function getWorkflow(id: string): Promise<Workflow | null> {
+export async function getWorkflow(
+  id: string,
+  actor?: { supabase: { from: (table: string) => unknown } } | null,
+): Promise<Workflow | null> {
   if (isDataDemoMode()) return getDemoWorkflow(id);
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase =
+    actor?.supabase ??
+    (await getUserWorkspaceContext()).supabase;
   if (!supabase) return null;
 
-  const { data, error } = await supabase.from("workflows").select("*").eq("id", id).maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).from("workflows").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
   return asWorkflow(data as Record<string, unknown>);
@@ -116,6 +122,7 @@ export async function updateWorkflow(
     send_config: SendConfig;
     last_run: WorkflowLastRun | null;
   }>,
+  actor?: { supabase: { from: (table: string) => unknown } } | null,
 ): Promise<Workflow> {
   if (isDataDemoMode()) {
     const updated = updateDemoWorkflow(id, patch);
@@ -123,10 +130,13 @@ export async function updateWorkflow(
     return updated;
   }
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase =
+    actor?.supabase ??
+    (await getUserWorkspaceContext()).supabase;
   if (!supabase) throw new Error("Unauthorized");
 
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
     .from("workflows")
     .update(patch)
     .eq("id", id)

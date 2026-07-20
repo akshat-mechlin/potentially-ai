@@ -127,6 +127,80 @@ export function extractWorkflowConfig(graph: WorkflowGraph): ExtractedWorkflowCo
   };
 }
 
+export function resolveConditionBranches(graph: WorkflowGraph): {
+  conditionNodeId: string | null;
+  trueKinds: WorkflowNodeKind[];
+  falseKinds: WorkflowNodeKind[];
+  trueLeadsToEmail: boolean;
+  trueLeadsToIntro: boolean;
+  falseLeadsToEmail: boolean;
+  falseLeadsToIntro: boolean;
+} {
+  const condition = nodeOfKind(graph, "condition");
+  if (!condition) {
+    return {
+      conditionNodeId: null,
+      trueKinds: [],
+      falseKinds: [],
+      trueLeadsToEmail: true,
+      trueLeadsToIntro: false,
+      falseLeadsToEmail: false,
+      falseLeadsToIntro: Boolean(nodeOfKind(graph, "action_intro")),
+    };
+  }
+
+  const kindById = new Map(
+    graph.nodes.map((node) => [node.id, (node.type || node.data.kind) as WorkflowNodeKind]),
+  );
+
+  const collectKinds = (handle: "true" | "false") => {
+    const kinds = new Set<WorkflowNodeKind>();
+    const queue = graph.edges
+      .filter(
+        (edge) =>
+          edge.source === condition.id &&
+          (edge.sourceHandle === handle || (!edge.sourceHandle && handle === "true")),
+      )
+      .map((edge) => edge.target);
+
+    const seen = new Set<string>();
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const kind = kindById.get(id);
+      if (kind) kinds.add(kind);
+      for (const edge of graph.edges) {
+        if (edge.source === id) queue.push(edge.target);
+      }
+    }
+    return [...kinds];
+  };
+
+  const trueKinds = collectKinds("true");
+  const falseKinds = collectKinds("false");
+
+  // Defaults when edges aren't wired: true → email, false → intro (matches template)
+  const trueLeadsToEmail =
+    trueKinds.includes("action_email") ||
+    (!trueKinds.includes("action_intro") && Boolean(nodeOfKind(graph, "action_email")));
+  const trueLeadsToIntro = trueKinds.includes("action_intro");
+  const falseLeadsToIntro =
+    falseKinds.includes("action_intro") ||
+    (!falseKinds.includes("action_email") && Boolean(nodeOfKind(graph, "action_intro")));
+  const falseLeadsToEmail = falseKinds.includes("action_email");
+
+  return {
+    conditionNodeId: condition.id,
+    trueKinds,
+    falseKinds,
+    trueLeadsToEmail,
+    trueLeadsToIntro,
+    falseLeadsToEmail,
+    falseLeadsToIntro,
+  };
+}
+
 export type WorkflowValidation = {
   ok: boolean;
   errors: string[];
@@ -191,16 +265,30 @@ export function validateWorkflowGraph(graph: WorkflowGraph): WorkflowValidation 
 
   const extracted = extractWorkflowConfig(graph);
   if (extracted.trigger.mode === "schedule") {
-    warnings.push("Schedule triggers are saved, but this run executes now. Cron automation is not live yet.");
+    warnings.push(
+      "Schedule is live: due runs fire from cron nudges and when you open Workflows (Run due).",
+    );
   }
   if (extracted.trigger.mode === "new_contact") {
-    warnings.push("New-contact triggers are saved, but this run executes against your current network now.");
+    warnings.push(
+      "New-contact trigger is live: importing contacts auto-runs this workflow while it is Active.",
+    );
   }
   if (extracted.hasDelay) {
-    warnings.push("Wait nodes are noted in the plan; delays apply in playbook sequences after outreach starts.");
+    warnings.push(
+      "Wait under 24h parks the run until due (cron/resume). Longer waits set playbook follow-up delay.",
+    );
   }
   if (extracted.hasApprove) {
-    warnings.push("Human approval keeps the playbook in Assist/Supervised review before sends.");
+    warnings.push("Human approval keeps sends in Assist/Supervised review on this page.");
+  }
+  if (extracted.hasNotifyAction) {
+    warnings.push("Notify creates an in-app notification when the run deploys.");
+  }
+  if (extracted.hasIntroAction || extracted.hasEmailAction) {
+    warnings.push(
+      "Condition true/false edges route contacts to email vs intro actions separately.",
+    );
   }
 
   return { ok: errors.length === 0, errors, warnings };

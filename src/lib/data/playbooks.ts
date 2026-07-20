@@ -59,10 +59,13 @@ export async function listPlaybooks(workspaceId?: string | null): Promise<Playbo
   return (data ?? []) as Playbook[];
 }
 
-export async function getPlaybook(id: string): Promise<Playbook | null> {
+export async function getPlaybook(
+  id: string,
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
+): Promise<Playbook | null> {
   if (isDataDemoMode()) return getDemoPlaybook(id);
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? (await getUserWorkspaceContext()).supabase;
   if (!supabase) return null;
 
   const { data, error } = await supabase.from("playbooks").select("*").eq("id", id).maybeSingle();
@@ -70,24 +73,50 @@ export async function getPlaybook(id: string): Promise<Playbook | null> {
   return (data as Playbook) ?? null;
 }
 
-export async function createPlaybook(input: {
-  name: string;
-  description?: string;
-  goal?: string;
-  workspaceId?: string | null;
-}) {
+export async function createPlaybook(
+  input: {
+    name: string;
+    description?: string;
+    goal?: string;
+    workspaceId?: string | null;
+  },
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
+) {
   if (isDataDemoMode()) {
     return createDemoPlaybook(input.name, input.description, input.goal);
   }
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext(undefined, input.workspaceId);
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  const supabase = actor?.supabase ?? null;
+  const userId = actor?.userId;
+  const workspaceId = actor?.workspaceId;
 
-  const { data, error } = await supabase
+  if (actor && supabase && userId && workspaceId) {
+    const { data, error } = await supabase
+      .from("playbooks")
+      .insert({
+        workspace_id: workspaceId,
+        created_by: userId,
+        name: input.name,
+        description: input.description ?? null,
+        goal: input.goal ?? null,
+        icp_profile: defaultIcp,
+        matching_config: defaultMatching,
+        send_config: { include_unsubscribe: true, skip_weekends: true },
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return data as Playbook;
+  }
+
+  const ctx = await getUserWorkspaceContext(undefined, input.workspaceId);
+  if (!ctx.supabase || !ctx.user || !ctx.workspaceId) throw new Error("Unauthorized");
+
+  const { data, error } = await ctx.supabase
     .from("playbooks")
     .insert({
-      workspace_id: workspaceId,
-      created_by: user.id,
+      workspace_id: ctx.workspaceId,
+      created_by: ctx.user.id,
       name: input.name,
       description: input.description ?? null,
       goal: input.goal ?? null,
@@ -119,10 +148,11 @@ export async function updatePlaybook(
     template_id: string | null;
     calendly_url?: string | null;
   }>,
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
 ) {
   if (isDataDemoMode()) return updateDemoPlaybook(id, updates);
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? (await getUserWorkspaceContext()).supabase;
   if (!supabase) throw new Error("Unauthorized");
 
   const { data, error } = await supabase
@@ -247,15 +277,30 @@ async function maybeCompleteRun(
     .eq("id", runId);
 }
 
-export async function deployPlaybookRun(playbookId: string, options?: { segmentId?: string; dryRun?: boolean }) {
+export async function deployPlaybookRun(
+  playbookId: string,
+  options?: {
+    segmentId?: string;
+    dryRun?: boolean;
+    actor?: import("@/lib/workflows/actor").WorkflowActor | null;
+  },
+) {
   if (isDataDemoMode()) {
     return createDemoRun(playbookId, options?.segmentId, options?.dryRun ?? false);
   }
 
-  const { supabase, user, workspaceId } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
+  const actor = options?.actor;
+  const session = actor ? null : await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? session?.supabase;
+  const userId = actor?.userId ?? session?.user?.id;
+  const workspaceId = actor?.workspaceId ?? session?.workspaceId;
+  if (!supabase || !userId || !workspaceId) throw new Error("Unauthorized");
 
-  const playbook = await getPlaybook(playbookId);
+  const playbook = actor
+    ? ((
+        await supabase.from("playbooks").select("*").eq("id", playbookId).maybeSingle()
+      ).data as Playbook | null)
+    : await getPlaybook(playbookId);
   if (!playbook) throw new Error("Playbook not found");
 
   const { data: run, error: runError } = await supabase
@@ -263,7 +308,7 @@ export async function deployPlaybookRun(playbookId: string, options?: { segmentI
     .insert({
       playbook_id: playbookId,
       workspace_id: workspaceId,
-      triggered_by: user.id,
+      triggered_by: userId,
       segment_id: options?.segmentId ?? null,
       status: "matching",
       icp_snapshot: playbook.icp_profile,
@@ -286,15 +331,24 @@ export async function deployPlaybookRun(playbookId: string, options?: { segmentI
     activeContactIds,
     doNotContactIds,
     lastContactedAt,
-    currentUserId: user.id,
+    currentUserId: userId,
   };
 
   let matched: MatchResult[] = [];
   let skipped: MatchResult[] = [];
 
   if (options?.segmentId) {
-    const { getSegmentContactIds } = await import("@/lib/data/segments");
-    const ids = await getSegmentContactIds(options.segmentId);
+    let ids: string[] = [];
+    if (actor) {
+      const { data: rows } = await supabase
+        .from("segment_contacts")
+        .select("contact_id")
+        .eq("segment_id", options.segmentId);
+      ids = (rows ?? []).map((row: { contact_id: string }) => row.contact_id);
+    } else {
+      const { getSegmentContactIds } = await import("@/lib/data/segments");
+      ids = await getSegmentContactIds(options.segmentId);
+    }
     const contacts = await getContactsByIds(ids);
     await hydrateOwnerNames(supabase, contacts, ownerNames);
     const result = scoreAllContactsForPlaybook(
@@ -308,7 +362,14 @@ export async function deployPlaybookRun(playbookId: string, options?: { segmentI
     skipped = result.skipped;
   } else {
     for (let offset = 0; ; offset += PLAYBOOK_CONTACT_BATCH) {
-      const batch = await listContacts({ limit: PLAYBOOK_CONTACT_BATCH, offset });
+      const batch = await listContacts({
+        limit: PLAYBOOK_CONTACT_BATCH,
+        offset,
+        allGroups: false,
+        asAdmin: actor
+          ? { supabase, workspaceId }
+          : undefined,
+      });
       if (!batch.length) break;
 
       await hydrateOwnerNames(supabase, batch, ownerNames);

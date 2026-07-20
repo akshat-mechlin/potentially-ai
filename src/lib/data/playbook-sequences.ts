@@ -39,6 +39,7 @@ export async function saveSequenceSteps(
     subject_hint?: string;
     allowed_weekdays?: number[];
   }>,
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
 ) {
   if (isDataDemoMode()) {
     const { updateDemoPlaybook } = await import("@/lib/demo-store/playbooks");
@@ -60,7 +61,7 @@ export async function saveSequenceSteps(
     return;
   }
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? (await getUserWorkspaceContext()).supabase;
   if (!supabase) throw new Error("Unauthorized");
 
   await supabase.from("playbook_sequence_steps").delete().eq("playbook_id", playbookId);

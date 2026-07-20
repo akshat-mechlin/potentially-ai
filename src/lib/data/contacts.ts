@@ -113,6 +113,12 @@ type ListContactsOptions = {
   hasEmail?: boolean;
   hasCompany?: boolean;
   hasTitle?: boolean;
+  /** Service-role / system runs scoped to one workspace. */
+  asAdmin?: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase: any;
+    workspaceId: string;
+  };
 };
 
 function applyContactFieldFilters(
@@ -284,14 +290,18 @@ export async function listContacts(
     return contacts.slice(offset, offset + limit);
   }
 
-  const { supabase, workspaceId: activeWorkspaceId } = await getUserWorkspaceContext();
+  const asAdmin = options.asAdmin;
+  const session = asAdmin ? null : await getUserWorkspaceContext();
+  const supabase = asAdmin?.supabase ?? session?.supabase;
   if (!supabase) return [];
 
-  const workspaceIds = allGroups
-    ? (await listUserWorkspaces(supabase)).map((workspace) => workspace.id)
-    : activeWorkspaceId
-      ? [activeWorkspaceId]
-      : [];
+  const workspaceIds = asAdmin
+    ? [asAdmin.workspaceId]
+    : allGroups
+      ? (await listUserWorkspaces(supabase)).map((workspace) => workspace.id)
+      : session?.workspaceId
+        ? [session.workspaceId]
+        : [];
 
   if (!workspaceIds.length) return [];
 
@@ -336,9 +346,16 @@ export async function getContactsByIds(ids: string[]): Promise<Contact[]> {
   const { supabase } = await getUserWorkspaceContext();
   if (!supabase) return [];
 
-  const { data, error } = await supabase.from("contacts").select("*").in("id", uniqueIds);
-  if (error) throw error;
-  return (data ?? []) as Contact[];
+  // Chunk to avoid UND_ERR_HEADERS_OVERFLOW on large .in() filter URLs.
+  const CHUNK = 80;
+  const contacts: Contact[] = [];
+  for (let i = 0; i < uniqueIds.length; i += CHUNK) {
+    const slice = uniqueIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase.from("contacts").select("*").in("id", slice);
+    if (error) throw error;
+    if (data?.length) contacts.push(...(data as Contact[]));
+  }
+  return contacts;
 }
 
 export async function getContact(id: string): Promise<Contact | null> {
@@ -669,6 +686,24 @@ async function loadExistingMatchesForImport(
 }
 
 export async function importContactsFromSource(
+  rows: ImportRow[],
+  source: import("@/types").SyncSource,
+  options?: ImportOptions,
+) {
+  const result = await importContactsFromSourceInner(rows, source, options);
+  if (!options?.asAdmin && result.imported > 0) {
+    void import("@/lib/workflows/triggers")
+      .then(({ triggerNewContactWorkflows }) =>
+        triggerNewContactWorkflows({ importedCount: result.imported }),
+      )
+      .catch((error) => {
+        console.error("New-contact workflow trigger failed:", error);
+      });
+  }
+  return result;
+}
+
+async function importContactsFromSourceInner(
   rows: ImportRow[],
   source: import("@/types").SyncSource,
   options?: ImportOptions,

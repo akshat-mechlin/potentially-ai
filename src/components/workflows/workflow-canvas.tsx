@@ -35,6 +35,7 @@ import { useTheme } from "@/components/theme-provider";
 import { NodeConfigPanel } from "@/components/workflows/node-config-panel";
 import { NodePalette } from "@/components/workflows/node-palette";
 import { WorkflowNode } from "@/components/workflows/workflow-node";
+import { WorkflowRunPanel } from "@/components/workflows/workflow-run-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getNodeDefinition } from "@/lib/workflows/catalog";
@@ -43,9 +44,11 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import type {
   Workflow,
   WorkflowGraph,
+  WorkflowLastRun,
   WorkflowListItem,
   WorkflowNodeData,
   WorkflowNodeKind,
+  WorkflowNodeProgress,
 } from "@/types/workflows";
 
 const nodeTypes = {
@@ -61,13 +64,31 @@ const nodeTypes = {
   action_notify: WorkflowNode,
 };
 
-function toFlowNodes(graph: WorkflowGraph): Node[] {
-  return (graph.nodes ?? []).map((node) => ({
+function applyNodeProgress(nodes: Node[], progress?: WorkflowNodeProgress[] | null): Node[] {
+  if (!progress?.length) return nodes;
+  const byId = new Map(progress.map((item) => [item.node_id, item]));
+  return nodes.map((node) => {
+    const item = byId.get(node.id);
+    if (!item) return node;
+    return {
+      ...node,
+      data: {
+        ...(node.data as WorkflowNodeData),
+        runStatus: item.status,
+        runDetail: item.detail,
+      },
+    };
+  });
+}
+
+function toFlowNodes(graph: WorkflowGraph, progress?: WorkflowNodeProgress[] | null): Node[] {
+  const nodes = (graph.nodes ?? []).map((node) => ({
     id: node.id,
     type: node.type,
     position: node.position,
     data: node.data,
   }));
+  return applyNodeProgress(nodes, progress);
 }
 
 function toFlowEdges(graph: WorkflowGraph, isDark: boolean): Edge[] {
@@ -88,12 +109,17 @@ function toFlowEdges(graph: WorkflowGraph, isDark: boolean): Edge[] {
 
 function fromFlowGraph(nodes: Node[], edges: Edge[], viewport?: Viewport): WorkflowGraph {
   return {
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      type: (node.type ?? "trigger") as WorkflowNodeKind,
-      position: node.position,
-      data: node.data as WorkflowNodeData,
-    })),
+    nodes: nodes.map((node) => {
+      const data = { ...(node.data as WorkflowNodeData) };
+      delete data.runStatus;
+      delete data.runDetail;
+      return {
+        id: node.id,
+        type: (node.type ?? "trigger") as WorkflowNodeKind,
+        position: node.position,
+        data,
+      };
+    }),
     edges: edges.map((edge) => ({
       id: edge.id,
       source: edge.source,
@@ -121,14 +147,44 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
   const isDark = resolvedTheme === "dark";
   const { screenToFlowPosition, getViewport, fitView } = useReactFlow();
   const [name, setName] = useState(workflow.name);
-  const [nodes, setNodes, onNodesChange] = useNodesState(toFlowNodes(workflow.graph));
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    toFlowNodes(workflow.graph, workflow.last_run?.node_progress),
+  );
   const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(workflow.graph, isDark));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lastRun, setLastRun] = useState(workflow.last_run);
+  const [panelOpen, setPanelOpen] = useState(Boolean(workflow.last_run?.run_id));
   const fitted = useRef(false);
+
+  const refreshRunStatus = useCallback(async () => {
+    if (!workflow.id || !lastRun?.run_id) return;
+    try {
+      const res = await fetch(`/api/workflows/${workflow.id}/run-status`);
+      const payload = await res.json();
+      if (!res.ok || !payload.last_run) return;
+      const next = payload.last_run as WorkflowLastRun;
+      setLastRun(next);
+      setNodes((current) => applyNodeProgress(current, next.node_progress));
+    } catch {
+      // ignore status refresh errors
+    }
+  }, [workflow.id, lastRun?.run_id, setNodes]);
+
+  useEffect(() => {
+    void fetch("/api/workflows/run-due", { method: "POST" })
+      .then((r) => r.json())
+      .then((payload) => {
+        if (payload?.ran > 0) {
+          toast.success(`Ran ${payload.ran} due scheduled workflow${payload.ran === 1 ? "" : "s"}`);
+          void queryClient.invalidateQueries({ queryKey: ["workflows"] });
+          void queryClient.invalidateQueries({ queryKey: ["workflow", workflow.id] });
+        }
+      })
+      .catch(() => {});
+  }, [queryClient, workflow.id]);
 
   useEffect(() => {
     if (fitted.current) return;
@@ -273,7 +329,7 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
       if (!res.ok) throw new Error(payload.error ?? "Failed to run workflow");
 
       setLastRun({
-        at: new Date().toISOString(),
+        at: payload.at ?? new Date().toISOString(),
         run_id: payload.run_id,
         segment_id: payload.segment_id,
         playbook_id: payload.playbook_id,
@@ -282,10 +338,19 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
         dry_run: payload.dry_run,
         warnings: payload.warnings ?? [],
         planned_actions: payload.planned_actions ?? [],
+        node_progress: payload.node_progress,
+        matches_preview: payload.matches_preview,
+        stats: payload.stats,
+        notify_sent: payload.notify_sent,
+        delay: payload.delay,
+        trigger_mode: payload.trigger_mode,
       });
+      setNodes((current) => applyNodeProgress(current, payload.node_progress));
+      setPanelOpen(true);
 
       await queryClient.invalidateQueries({ queryKey: ["workflows"] });
       await queryClient.invalidateQueries({ queryKey: ["workflow", workflow.id] });
+      await queryClient.invalidateQueries({ queryKey: ["playbook-run", payload.run_id] });
 
       for (const warning of payload.warnings ?? []) {
         toast.message(warning);
@@ -294,11 +359,7 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
       toast.success(
         `Matched ${payload.matched_count} contact${payload.matched_count === 1 ? "" : "s"}`,
         {
-          description: "Segment + playbook updated. Open the run to review and send.",
-          action: {
-            label: "Open run",
-            onClick: () => router.push(payload.run_href),
-          },
+          description: "Review, draft, and send from the panel on the right.",
         },
       );
     } catch (error) {
@@ -315,7 +376,7 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
     workflow.id,
     name,
     queryClient,
-    router,
+    setNodes,
   ]);
 
   const createWorkflow = useCallback(async () => {
@@ -405,11 +466,23 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
             <p className="mt-1">
               {lastRun.matched_count} matched · {formatRelativeTime(lastRun.at)}
             </p>
+            {lastRun.stats ? (
+              <p className="mt-1">
+                {lastRun.stats.sent} sent · {lastRun.stats.replied} replies
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="mt-2 inline-flex items-center gap-1 text-primary hover:underline"
+              onClick={() => setPanelOpen(true)}
+            >
+              Open results
+            </button>
             <Link
               href={`/playbook-runs/${lastRun.run_id}`}
-              className="mt-2 inline-flex items-center gap-1 text-primary hover:underline"
+              className="mt-1 flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
             >
-              Open run <ExternalLink className="h-3 w-3" />
+              Full run page <ExternalLink className="h-3 w-3" />
             </Link>
           </div>
         )}
@@ -497,6 +570,17 @@ function WorkflowCanvasInner({ workflow, workflows }: WorkflowCanvasInnerProps) 
           onChange={updateNodeData}
           onClose={() => setSelectedId(null)}
           onDelete={deleteNode}
+        />
+      ) : null}
+
+      {panelOpen && lastRun?.run_id && lastRun.playbook_id ? (
+        <WorkflowRunPanel
+          workflowId={workflow.id}
+          playbookId={lastRun.playbook_id}
+          runId={lastRun.run_id}
+          lastRun={lastRun}
+          onClose={() => setPanelOpen(false)}
+          onStatsChange={() => void refreshRunStatus()}
         />
       ) : null}
     </div>

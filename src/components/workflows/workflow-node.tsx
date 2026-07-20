@@ -4,7 +4,19 @@ import { memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import { getNodeDefinition } from "@/lib/workflows/catalog";
-import type { WorkflowNodeData, WorkflowNodeKind } from "@/types/workflows";
+import type {
+  WorkflowNodeData,
+  WorkflowNodeKind,
+  WorkflowNodeRunStatus,
+} from "@/types/workflows";
+
+const statusStyles: Record<WorkflowNodeRunStatus, string> = {
+  pending: "bg-muted text-muted-foreground",
+  running: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  waiting: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
+  done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+  skipped: "bg-muted text-muted-foreground",
+};
 
 function WorkflowNodeComponent({ data, selected }: NodeProps) {
   const nodeData = data as WorkflowNodeData;
@@ -15,6 +27,8 @@ function WorkflowNodeComponent({ data, selected }: NodeProps) {
   const outputIds = def?.handles.outputIds;
   const hasInput = (def?.handles.inputs ?? 0) > 0;
   const hasSingleOutput = !outputIds && (def?.handles.outputs ?? 0) > 0;
+  const runStatus = nodeData.runStatus as WorkflowNodeRunStatus | undefined;
+  const runDetail = typeof nodeData.runDetail === "string" ? nodeData.runDetail : undefined;
 
   return (
     <div
@@ -23,6 +37,8 @@ function WorkflowNodeComponent({ data, selected }: NodeProps) {
         selected
           ? "border-[var(--node-accent)] ring-2 ring-[var(--node-accent)]/35"
           : "border-border",
+        runStatus === "running" && "border-amber-400/70",
+        runStatus === "done" && "border-emerald-500/50",
       )}
       style={{ ["--node-accent" as string]: accent }}
     >
@@ -41,9 +57,25 @@ function WorkflowNodeComponent({ data, selected }: NodeProps) {
         >
           {Icon ? <Icon className="h-4 w-4" style={{ color: accent }} /> : null}
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{nodeData.label}</p>
-          {nodeData.description ? (
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">{nodeData.label}</p>
+            {runStatus ? (
+              <span
+                className={cn(
+                  "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                  statusStyles[runStatus],
+                )}
+              >
+                {runStatus}
+              </span>
+            ) : null}
+          </div>
+          {runDetail ? (
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-foreground/80">
+              {runDetail}
+            </p>
+          ) : nodeData.description ? (
             <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
               {nodeData.description}
             </p>
