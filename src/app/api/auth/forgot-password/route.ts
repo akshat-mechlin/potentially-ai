@@ -32,7 +32,7 @@ export async function POST(request: Request) {
         data.properties.action_link,
         request,
       );
-      const template = passwordResetEmail(publicActionLink);
+      const template = await passwordResetEmail(publicActionLink);
       const delivery = await deliverAuthEmail({
         to: email,
         subject: template.subject,

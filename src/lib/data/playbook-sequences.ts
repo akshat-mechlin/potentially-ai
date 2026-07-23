@@ -1,5 +1,6 @@
 import { isDataDemoMode } from "@/lib/app-config";
 import { generateOutreach } from "@/lib/ai/openai";
+import { buildRecipientFacts } from "@/lib/ai/outreach-prompt";
 import { getPlaybook } from "@/lib/data/playbooks";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -85,8 +86,11 @@ export async function scheduleFollowUpForProspect(
   runContactId: string,
   playbook: Playbook,
   currentStep: number,
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
 ) {
-  const steps = await listSequenceSteps(playbook.id);
+  const steps = actor
+    ? await listSequenceStepsAdmin(playbook.id)
+    : await listSequenceSteps(playbook.id);
   const nextStep = steps[currentStep + 1];
   if (!nextStep) return null;
 
@@ -105,7 +109,7 @@ export async function scheduleFollowUpForProspect(
     return nextAt;
   }
 
-  const { supabase } = await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? (await getUserWorkspaceContext()).supabase;
   if (!supabase) return null;
 
   await supabase
@@ -152,9 +156,14 @@ export async function processDueSequenceFollowUps() {
   let processed = 0;
 
   for (const row of due ?? []) {
-    const run = row.run as { dry_run: boolean; playbook: Playbook } | null;
+    const run = row.run as {
+      dry_run: boolean;
+      workspace_id: string;
+      triggered_by: string | null;
+      playbook: Playbook;
+    } | null;
     const playbook = run?.playbook;
-    if (!playbook || !row.contact_id) continue;
+    if (!playbook || !row.contact_id || !run?.workspace_id) continue;
 
     const steps = await listSequenceStepsAdmin(playbook.id);
     const step = steps[(row.current_sequence_step as number) ?? 0];
@@ -174,46 +183,64 @@ export async function processDueSequenceFollowUps() {
 
     const { data: contact } = await supabase
       .from("contacts")
-      .select("full_name, title, company_name, email")
+      .select("full_name, title, company_name, email, location, bio, linkedin_url, tags")
       .eq("id", row.contact_id)
       .maybeSingle();
 
     if (!contact?.email) continue;
 
-    const outreach = await generateOutreach({
-      contactName: contact.full_name,
-      contactTitle: contact.title,
-      companyName: contact.company_name,
-      type: "cold_email",
-      tone: step.tone,
-      goal: step.goal_override ?? playbook.goal ?? "Follow up on previous outreach",
-      context: step.subject_hint ?? undefined,
-    });
+    try {
+      const outreach = await generateOutreach({
+        contactName: contact.full_name,
+        contactTitle: contact.title,
+        companyName: contact.company_name,
+        type: "cold_email",
+        tone: step.tone,
+        goal: step.goal_override ?? playbook.goal ?? "Follow up on previous outreach",
+        context: step.subject_hint ?? undefined,
+        recipientFacts: buildRecipientFacts(contact),
+      });
 
-    if (run?.dry_run || playbook.automation_level === "assist") {
-      await supabase
-        .from("playbook_run_contacts")
-        .update({
-          status: "pending_approval",
-          draft_subject: outreach.subject ?? step.subject_hint ?? "Follow up",
-          draft_body: outreach.body,
-          next_action_at: null,
-          last_action_at: new Date().toISOString(),
-        })
-        .eq("id", row.id);
-    } else {
-      const { approveAndSendProspect } = await import("@/lib/data/playbooks");
-      await supabase
-        .from("playbook_run_contacts")
-        .update({
-          draft_subject: outreach.subject,
-          draft_body: outreach.body,
-        })
-        .eq("id", row.id);
-      await approveAndSendProspect(row.id, row.run_id);
+      if (run?.dry_run || playbook.automation_level === "assist") {
+        await supabase
+          .from("playbook_run_contacts")
+          .update({
+            status: "pending_approval",
+            draft_subject: outreach.subject ?? step.subject_hint ?? "Follow up",
+            draft_body: outreach.body,
+            next_action_at: null,
+            last_action_at: new Date().toISOString(),
+          })
+          .eq("id", row.id);
+      } else {
+        const { approveAndSendProspect } = await import("@/lib/data/playbooks");
+        const { adminActorForWorkflow } = await import("@/lib/workflows/actor");
+        const actorUserId = run.triggered_by;
+        if (!actorUserId) {
+          console.error("[sequence-cron] missing triggered_by for run", row.run_id);
+          continue;
+        }
+        await supabase
+          .from("playbook_run_contacts")
+          .update({
+            draft_subject: outreach.subject,
+            draft_body: outreach.body,
+          })
+          .eq("id", row.id);
+        await approveAndSendProspect(
+          row.id,
+          row.run_id,
+          adminActorForWorkflow({
+            userId: actorUserId,
+            workspaceId: run.workspace_id,
+          }),
+        );
+      }
+
+      processed += 1;
+    } catch (error) {
+      console.error("[sequence-cron] follow-up failed for", row.id, error);
     }
-
-    processed += 1;
   }
 
   return { processed };

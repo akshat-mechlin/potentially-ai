@@ -208,5 +208,17 @@
     "name": "support_ticket_attachments",
     "file": "20260720120000_support_ticket_attachments.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260720140000",
+    "name": "support_ticket_reads",
+    "file": "20260720140000_support_ticket_reads.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260721120000",
+    "name": "platform_email_templates",
+    "file": "20260721120000_platform_email_templates.sql",
+    "remote": "applied"
   }
 ]

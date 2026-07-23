@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,7 +53,20 @@ export default function SupportTicketPage() {
       };
     },
     enabled,
+    refetchInterval: 20_000,
   });
+
+  useEffect(() => {
+    if (!enabled || !params.id || !data?.ticket) return;
+    void fetch("/api/support/unread", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticketId: params.id }),
+    }).then(() => {
+      void queryClient.invalidateQueries({ queryKey: ["support-unread"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [enabled, params.id, data?.ticket?.id, queryClient]);
 
   const replyMutation = useMutation({
     mutationFn: async () => {
@@ -74,6 +87,7 @@ export default function SupportTicketPage() {
       toast.success("Reply sent");
       queryClient.invalidateQueries({ queryKey: ["support-ticket", params.id] });
       queryClient.invalidateQueries({ queryKey: ["support-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["support-unread"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -96,7 +110,7 @@ export default function SupportTicketPage() {
           href="/support"
           className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> All tickets
+          <ArrowLeft className="h-3.5 w-3.5" /> All Tickets
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

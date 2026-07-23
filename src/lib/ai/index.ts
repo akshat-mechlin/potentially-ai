@@ -100,6 +100,7 @@ export async function generateOutreach(params: {
   tone: string;
   goal: string;
   context?: string;
+  recipientFacts?: string[];
 }): Promise<OutreachResult> {
   try {
     return await runChat("generateOutreach", {
@@ -165,13 +166,20 @@ function generateMockSearchResult(
 
 function generateMockOutreach(params: {
   contactName: string;
+  contactTitle?: string | null;
+  companyName?: string | null;
   type: string;
   tone: string;
   goal: string;
 }): OutreachResult {
+  const first = params.contactName.trim().split(/\s+/)[0] || params.contactName;
+  const roleBit = params.contactTitle
+    ? `your work as ${params.contactTitle}`
+    : "the work you lead";
+  const companyBit = params.companyName ? ` at ${params.companyName}` : "";
   return {
-    subject: `Introduction: ${params.goal}`,
-    body: `Hi ${params.contactName.split(" ")[0]},\n\nI hope this message finds you well. I wanted to reach out regarding ${params.goal}.\n\nI'd love to connect and explore how we might collaborate.\n\nBest regards`,
+    subject: `${first}, quick thought on ${params.goal.toLowerCase().replace(/\.$/, "")}`,
+    body: `Hi ${first},\n\nI've been following ${roleBit}${companyBit} and wanted to reach out about ${params.goal}.\n\nIf useful, I can share a few concrete ideas tailored to your team.\n\nBest regards`,
     cta: "Would you be open to a brief 15-minute call this week?",
   };
 }

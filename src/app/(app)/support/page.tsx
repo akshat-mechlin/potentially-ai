@@ -91,6 +91,7 @@ export default function SupportPage() {
       toast.success("Ticket created — we'll email you when we reply");
       queryClient.invalidateQueries({ queryKey: ["support-tickets"] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["support-unread"] });
       setOpen(false);
       setSubject("");
       setBody("");
@@ -124,7 +125,7 @@ export default function SupportPage() {
         >
           <DialogTrigger asChild>
             <Button>
-              <Plus className="h-4 w-4" /> New ticket
+              <Plus className="h-4 w-4" /> New Ticket
             </Button>
           </DialogTrigger>
           <DialogContent
@@ -151,7 +152,7 @@ export default function SupportPage() {
             }}
           >
             <DialogHeader>
-              <DialogTitle>New support ticket</DialogTitle>
+              <DialogTitle>New Support Ticket</DialogTitle>
               <p className="text-sm text-muted-foreground">
                 Tell us what you need help with. We&apos;ll reply in-app and by email.
               </p>
@@ -252,7 +253,7 @@ export default function SupportPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Your tickets</CardTitle>
+            <CardTitle className="text-base">Your Tickets</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 p-0">
             {tickets.map((ticket) => (

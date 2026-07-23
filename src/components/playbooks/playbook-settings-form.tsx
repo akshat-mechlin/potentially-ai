@@ -165,7 +165,7 @@ export function PlaybookSettingsForm({ playbook }: PlaybookSettingsFormProps) {
         <div className="space-y-2">
           <FieldHint
             label="Automation level"
-            hint="Assist: you approve every send. Supervised: drafts are queued for review. Autonomous: after drafts are generated, emails send without manual approval."
+            hint="Assist: you approve the first send in the run, and each sequence follow-up from the Runs tab. Supervised: drafts are queued for review the same way. Autonomous: after drafts are ready, follow-ups send without manual approval."
           />
           <Select value={automationLevel} onValueChange={(v) => setAutomationLevel(v as Playbook["automation_level"])}>
             <SelectTrigger>

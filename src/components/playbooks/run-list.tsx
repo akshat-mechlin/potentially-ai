@@ -29,49 +29,69 @@ export function RunList({ runs }: RunListProps) {
   if (isMobileApp) {
     return (
       <div className="space-y-2">
-        {runs.map((run) => (
-          <Link key={run.id} href={playbookRunHref(run.id)} className="block">
-            <div className="mobile-list-row">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{new Date(run.created_at).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">
-                  {run.stats?.matched ?? 0} matched · {run.stats?.sent ?? 0} sent
-                </p>
+        {runs.map((run) => {
+          const pending = run.pending_approval_count ?? 0;
+          return (
+            <Link key={run.id} href={playbookRunHref(run.id)} className="block">
+              <div className="mobile-list-row">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    {new Date(run.created_at).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {run.stats?.matched ?? 0} matched · {run.stats?.sent ?? 0} sent
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {pending > 0 && (
+                    <Badge>
+                      {pending} to approve
+                    </Badge>
+                  )}
+                  {run.dry_run && <Badge variant="secondary">dry</Badge>}
+                  <Badge variant="outline">{run.status}</Badge>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {run.dry_run && <Badge variant="secondary">dry</Badge>}
-                <Badge variant="outline">{run.status}</Badge>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      {runs.map((run) => (
-        <Link key={run.id} href={playbookRunHref(run.id)} className="block">
-          <Card className="transition-all hover:border-primary/40 hover:shadow-sm">
-            <CardContent className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{new Date(run.created_at).toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">
-                  {run.stats?.matched ?? 0} matched · {run.stats?.sent ?? 0} sent ·{" "}
-                  {run.stats?.replied ?? 0} replied
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {run.dry_run && <Badge variant="secondary">dry run</Badge>}
-                <Badge variant="outline">{run.status}</Badge>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
+      {runs.map((run) => {
+        const pending = run.pending_approval_count ?? 0;
+        return (
+          <Link key={run.id} href={playbookRunHref(run.id)} className="block">
+            <Card className="transition-all hover:border-primary/40 hover:shadow-sm">
+              <CardContent className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {new Date(run.created_at).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {run.stats?.matched ?? 0} matched · {run.stats?.sent ?? 0} sent ·{" "}
+                    {run.stats?.replied ?? 0} replied
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {pending > 0 && (
+                    <Badge>
+                      {pending} to approve
+                    </Badge>
+                  )}
+                  {run.dry_run && <Badge variant="secondary">dry run</Badge>}
+                  <Badge variant="outline">{run.status}</Badge>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      })}
     </div>
   );
 }

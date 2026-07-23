@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     }
 
     const publicActionLink = ensurePublicActionLink(actionLink, request);
-    const template = magicLinkEmail(publicActionLink);
+    const template = await magicLinkEmail(publicActionLink);
     const delivery = await deliverAuthEmail({
       to: email,
       subject: template.subject,

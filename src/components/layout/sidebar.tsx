@@ -20,6 +20,8 @@ import { useUIStore } from "@/stores";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { UnreadCountBadge } from "@/components/support/unread-badge";
+import { useQuery } from "@tanstack/react-query";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -39,6 +41,20 @@ export function Sidebar() {
   const agentModeActive = isAgentModePath(pathname);
   const resourcesActive = isResourcesPath(pathname);
   const visibleNavItems = filterNavByFlags(navItems, flags);
+
+  const { data: supportUnreadData } = useQuery({
+    queryKey: ["support-unread"],
+    queryFn: async () => {
+      const res = await fetch("/api/support/unread");
+      if (res.status === 403) return { unread: 0 };
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed");
+      return body as { unread: number };
+    },
+    enabled: flags?.support_ticketing !== false,
+    refetchInterval: 30_000,
+  });
+  const supportUnread = supportUnreadData?.unread ?? 0;
 
   return (
     <motion.aside
@@ -134,8 +150,8 @@ export function Sidebar() {
                       <span className="min-w-0 flex-1 truncate">{agentModeWorkflowItem.label}</span>
                       {agentModeWorkflowItem.comingSoon ? (
                         <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Coming soon
-                        </span>
+                      Coming Soon
+                    </span>
                       ) : null}
                     </>
                   )}
@@ -161,13 +177,14 @@ export function Sidebar() {
             <div className={cn("flex flex-col gap-0.5", sidebarOpen && "ml-3 border-l border-border/80 pl-1")}>
               {resourcesNav.items.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const isSupport = item.href === "/support";
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     title={item.label}
                     className={cn(
-                      "app-nav-link flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors",
+                      "app-nav-link relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors",
                       sidebarOpen ? "px-3" : "justify-center px-2",
                       isActive
                         ? "bg-secondary text-primary"
@@ -175,7 +192,15 @@ export function Sidebar() {
                     )}
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
-                    {sidebarOpen && <span>{item.label}</span>}
+                    {sidebarOpen && (
+                      <>
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        {isSupport ? <UnreadCountBadge count={supportUnread} /> : null}
+                      </>
+                    )}
+                    {!sidebarOpen && isSupport && supportUnread > 0 ? (
+                      <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-destructive" />
+                    ) : null}
                   </Link>
                 );
               })}

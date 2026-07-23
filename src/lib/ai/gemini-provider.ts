@@ -5,6 +5,11 @@ import {
   type ContactSummaryInput,
 } from "@/lib/ai/contact-summary";
 import { parseModelJson } from "@/lib/ai/parse-model-json";
+import {
+  buildOutreachSystemPrompt,
+  buildOutreachUserPrompt,
+  type OutreachPromptParams,
+} from "@/lib/ai/outreach-prompt";
 import { outreachResultSchema, searchResultSchema } from "@/lib/ai/schemas";
 
 const EMBEDDING_DIMENSION = 1536;
@@ -157,34 +162,16 @@ Return JSON matching: { contacts: [...], summary: string, suggested_actions: str
   };
 }
 
-export async function geminiGenerateOutreach(params: {
-  contactName: string;
-  contactTitle: string | null;
-  companyName: string | null;
-  type: "cold_email" | "warm_intro" | "linkedin";
-  tone: string;
-  goal: string;
-  context?: string;
-}): Promise<OutreachResult> {
-  const typeLabels = {
-    cold_email: "cold email",
-    warm_intro: "warm introduction request",
-    linkedin: "LinkedIn message",
-  };
-
+export async function geminiGenerateOutreach(
+  params: OutreachPromptParams,
+): Promise<OutreachResult> {
   const model = getChatModel(
-    `Generate a ${typeLabels[params.type]} with a ${params.tone} tone.
-Write like a sharp human. Do not use em dashes. Avoid stacked hyphenated buzzwords.
-Return valid JSON only. Use \\n for line breaks inside the body string (no raw newlines inside JSON strings).
-Return JSON: { "subject": string (for emails), "body": string, "cta": string }`,
+    `${buildOutreachSystemPrompt(params)}
+Return valid JSON only. Use \\n for line breaks inside the body string (no raw newlines inside JSON strings).`,
     outreachResponseSchema,
   );
 
-  const result = await model.generateContent(
-    `Contact: ${params.contactName}, ${params.contactTitle || "Professional"} at ${params.companyName || "their company"}
-Goal: ${params.goal}
-${params.context ? `Context: ${params.context}` : ""}`,
-  );
+  const result = await model.generateContent(buildOutreachUserPrompt(params));
 
   const parsed = parseModelJson<OutreachResult>(result.response.text());
   const validated = outreachResultSchema.safeParse(parsed);

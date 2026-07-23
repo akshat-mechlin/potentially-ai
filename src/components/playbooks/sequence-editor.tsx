@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,8 +18,9 @@ import { DesktopOnly } from "@/components/mobile/primitives";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useMobileApp } from "@/hooks/use-mobile-app";
+import { usePlaybook } from "@/hooks/use-playbook";
 import { cn } from "@/lib/utils";
-import type { SequenceStep } from "@/types/playbooks";
+import type { PendingPlaybookApproval, SequenceStep } from "@/types/playbooks";
 import { toast } from "sonner";
 
 const WEEKDAYS = [
@@ -79,6 +81,7 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
   const mounted = useIsClient();
   const { isMobileApp } = useMobileApp();
   const { confirm, confirmDialog } = useConfirmDialog();
+  const { data: playbookData } = usePlaybook(playbookId);
   const [busy, setBusy] = useState(false);
   const [sequenceSteps, setSequenceSteps] = useState<DraftStep[]>([
     {
@@ -94,6 +97,22 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
     queryFn: () => fetch(`/api/playbooks/${playbookId}/sequence`).then((r) => r.json()),
     enabled: mounted && !!playbookId,
   });
+
+  const automationLevel = playbookData?.playbook.automation_level;
+  const needsReview = automationLevel === "assist" || automationLevel === "supervised";
+
+  const { data: pendingApprovals } = useQuery({
+    queryKey: ["playbook-pending-approvals", playbookId],
+    queryFn: async () => {
+      const res = await fetch(`/api/playbooks/${playbookId}/pending-approvals`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Failed to load approvals");
+      return body.approvals as PendingPlaybookApproval[];
+    },
+    enabled: mounted && !!playbookId && needsReview,
+  });
+
+  const pendingCount = pendingApprovals?.length ?? 0;
 
   useEffect(() => {
     if (sequenceData?.steps?.length) {
@@ -152,13 +171,33 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
   };
 
   return (
+    <div className={cn("space-y-4", isMobileApp && "space-y-3")}>
+      {needsReview && pendingCount > 0 && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <p className="text-sm">
+              <span className="font-medium">
+                {pendingCount} follow-up{pendingCount === 1 ? "" : "s"} waiting for approval
+              </span>
+              <span className="text-muted-foreground">
+                {" "}
+                Review and send them from the Runs tab.
+              </span>
+            </p>
+            <Button size="sm" asChild>
+              <Link href={`/playbooks/${playbookId}/runs`}>Go to Runs</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     <Card className={cn(isMobileApp && "mobile-card-flat border-0 shadow-none")}>
       <CardHeader className={cn(isMobileApp && "px-4 pt-4 pb-2")}>
         <CardTitle className="text-base">Follow-up sequence</CardTitle>
         <DesktopOnly>
           <CardDescription>
             After the first email is sent, cron queues follow-ups after the delay, only on the days
-            you allow for each step.
+            you allow for each step. In Assist or Supervised mode, follow-up drafts wait on the Runs
+            tab for your approval before send.
           </CardDescription>
         </DesktopOnly>
       </CardHeader>
@@ -336,5 +375,6 @@ export function SequenceEditor({ playbookId }: SequenceEditorProps) {
       </CardContent>
       {confirmDialog}
     </Card>
+    </div>
   );
 }

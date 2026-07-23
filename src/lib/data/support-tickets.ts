@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
+import {
+  supportAdminAlertEmail,
+  supportTicketReceivedEmail,
+} from "@/lib/email/templates";
 import { getAppUrl } from "@/lib/supabase/admin";
 import {
   SUPPORT_ATTACHMENT_BUCKET,
@@ -170,10 +174,15 @@ async function notifyAllAdmins(params: {
     });
     if (profile.email) {
       try {
+        const alert = await supportAdminAlertEmail({
+          title: params.title,
+          message: params.message,
+          ticketUrl: params.link,
+        });
         await sendEmail({
           to: profile.email,
-          subject: params.title,
-          html: `<p>${params.message}</p><p><a href="${params.link}">Open ticket</a></p>`,
+          subject: alert.subject,
+          html: alert.html,
         });
       } catch (error) {
         console.error("[support] admin email failed:", error);
@@ -320,20 +329,34 @@ export async function createTicket(input: {
     excludeUserId: user.id,
   });
 
-  // Confirm to user
-  if (profile?.email) {
+  // Confirm to user (in-app always; email when address exists)
+  {
+    const ticketUrl = `${productUrl}/support/${ticket.id}`;
+    let email:
+      | { to: string; subject: string; html: string }
+      | undefined;
+    if (profile?.email) {
+      const received = await supportTicketReceivedEmail({
+        recipientName: profile.name,
+        subject: ticket.subject,
+        ticketUrl,
+      });
+      email = {
+        to: profile.email,
+        subject: received.subject,
+        html: received.html,
+      };
+    }
     await notifyUser({
       userId: user.id,
       title: "Support ticket created",
       message: `We received “${ticket.subject}”. Our team will reply soon.`,
-      link: `${productUrl}/support/${ticket.id}`,
-      email: {
-        to: profile.email,
-        subject: `Ticket received: ${ticket.subject}`,
-        html: `<p>Hi ${profile.name || "there"},</p><p>We received your support request <strong>${ticket.subject}</strong>.</p><p><a href="${productUrl}/support/${ticket.id}">View ticket</a></p>`,
-      },
+      link: ticketUrl,
+      email,
     });
   }
+
+  await markSupportTicketRead(ticket.id);
 
   return ticket as SupportTicket;
 }
@@ -402,5 +425,35 @@ export async function replyToMyTicket(
     excludeUserId: user.id,
   });
 
+  await markSupportTicketRead(ticketId);
+
   return { ...message, attachments };
+}
+
+export async function getSupportUnreadCount() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data, error } = await supabase.rpc("support_unread_message_count", {
+    p_user_id: user.id,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export async function markSupportTicketRead(ticketId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { error } = await supabase.rpc("mark_support_ticket_read", {
+    p_ticket_id: ticketId,
+    p_user_id: user.id,
+  });
+  if (error) throw error;
 }

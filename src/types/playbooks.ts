@@ -111,6 +111,22 @@ export interface PlaybookRun {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  /** Count of prospects waiting for approval (sequence follow-ups or drafts). */
+  pending_approval_count?: number;
+}
+
+export interface PendingPlaybookApproval {
+  id: string;
+  run_id: string;
+  contact_id: string;
+  draft_subject: string | null;
+  draft_body: string | null;
+  current_sequence_step: number;
+  last_action_at: string | null;
+  created_at: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_company: string | null;
 }
 
 export interface PlaybookProspect {
@@ -127,12 +143,18 @@ export interface PlaybookProspect {
   skip_reason: string | null;
   last_action_at: string | null;
   created_at: string;
+  current_sequence_step?: number;
+  next_action_at?: string | null;
   contact?: {
     id: string;
     full_name: string;
     title: string | null;
     email: string | null;
     company_name: string | null;
+    location?: string | null;
+    bio?: string | null;
+    linkedin_url?: string | null;
+    tags?: string[] | null;
     strength_score: number;
   };
 }

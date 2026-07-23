@@ -108,40 +108,31 @@ Return JSON matching: { contacts: [...], summary: string, suggested_actions: str
   };
 }
 
-export async function openaiGenerateOutreach(params: {
-  contactName: string;
-  contactTitle: string | null;
-  companyName: string | null;
-  type: "cold_email" | "warm_intro" | "linkedin";
-  tone: string;
-  goal: string;
-  context?: string;
-}): Promise<OutreachResult> {
-  if (!openai) throw new Error("OpenAI not configured");
+import {
+  buildOutreachSystemPrompt,
+  buildOutreachUserPrompt,
+  type OutreachPromptParams,
+} from "@/lib/ai/outreach-prompt";
 
-  const typeLabels = {
-    cold_email: "cold email",
-    warm_intro: "warm introduction request",
-    linkedin: "LinkedIn message",
-  };
+export async function openaiGenerateOutreach(
+  params: OutreachPromptParams,
+): Promise<OutreachResult> {
+  if (!openai) throw new Error("OpenAI not configured");
 
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       {
         role: "system",
-        content: `Generate a ${typeLabels[params.type]} with a ${params.tone} tone.
-Write like a sharp human. Do not use em dashes. Avoid stacked hyphenated buzzwords.
-Return JSON: { "subject": string (for emails), "body": string, "cta": string }`,
+        content: buildOutreachSystemPrompt(params),
       },
       {
         role: "user",
-        content: `Contact: ${params.contactName}, ${params.contactTitle || "Professional"} at ${params.companyName || "their company"}
-Goal: ${params.goal}
-${params.context ? `Context: ${params.context}` : ""}`,
+        content: buildOutreachUserPrompt(params),
       },
     ],
     response_format: { type: "json_object" },
+    temperature: 0.55,
   });
 
   return JSON.parse(response.choices[0].message.content || "{}");

@@ -15,6 +15,7 @@ import { logAuditEvent } from "@/lib/data/audit";
 import { getUserWorkspaceContext } from "@/lib/data/workspace";
 import { scoreAllContactsForPlaybook } from "@/lib/playbooks/matching";
 import { generateOutreach } from "@/lib/ai/openai";
+import { buildRecipientFacts } from "@/lib/ai/outreach-prompt";
 import type {
   IcpProfile,
   MatchingConfig,
@@ -453,7 +454,7 @@ export async function listRunProspects(runId: string): Promise<PlaybookProspect[
 
   const { data, error } = await supabase
     .from("playbook_run_contacts")
-    .select("*, contact:contacts(id, full_name, title, email, company_name, strength_score)")
+    .select("*, contact:contacts(id, full_name, title, email, company_name, location, bio, linkedin_url, tags, strength_score)")
     .eq("run_id", runId)
     .order("match_score", { ascending: false });
 
@@ -476,6 +477,8 @@ export async function listRunProspects(runId: string): Promise<PlaybookProspect[
       skip_reason: row.skip_reason,
       last_action_at: row.last_action_at,
       created_at: row.created_at,
+      current_sequence_step: (row as { current_sequence_step?: number }).current_sequence_step ?? 0,
+      next_action_at: (row as { next_action_at?: string | null }).next_action_at ?? null,
       contact: contact ?? undefined,
     } as PlaybookProspect;
   });
@@ -784,6 +787,7 @@ export async function generateProspectDrafts(runId: string, playbook: Playbook) 
           tone: playbook.tone,
           goal: playbook.goal ?? "Schedule a brief intro call",
           context: prospect.match_reason ?? undefined,
+          recipientFacts: buildRecipientFacts(prospect.contact),
         });
         subject = outreach.subject ?? `Quick intro: ${prospect.contact.full_name}`;
         body = outreach.body;
@@ -797,6 +801,7 @@ export async function generateProspectDrafts(runId: string, playbook: Playbook) 
         tone: playbook.tone,
         goal: playbook.goal ?? "Schedule a brief intro call",
         context: prospect.match_reason ?? undefined,
+        recipientFacts: buildRecipientFacts(prospect.contact),
       });
       subject = outreach.subject ?? `Quick intro: ${prospect.contact.full_name}`;
       body = outreach.body;
@@ -840,13 +845,78 @@ export async function generateProspectDrafts(runId: string, playbook: Playbook) 
   }
 }
 
-export async function approveAndSendProspect(prospectId: string, runId: string) {
-  const prospects = await listRunProspects(runId);
-  const prospect = prospects.find((p) => p.id === prospectId);
+export async function approveAndSendProspect(
+  prospectId: string,
+  runId: string,
+  actor?: import("@/lib/workflows/actor").WorkflowActor | null,
+) {
+  const session = actor ? null : await getUserWorkspaceContext();
+  const supabase = actor?.supabase ?? session?.supabase;
+  const userId = actor?.userId ?? session?.user?.id;
+  const workspaceId = actor?.workspaceId ?? session?.workspaceId;
+  const profile = session?.profile ?? null;
+  if (!supabase || !userId || !workspaceId) throw new Error("Unauthorized");
+
+  // Load prospect with admin/session client (cron has no cookie session).
+  let prospect: PlaybookProspect | undefined;
+  if (actor) {
+    const { data: row, error } = await supabase
+      .from("playbook_run_contacts")
+      .select(
+        "*, contact:contacts(id, full_name, title, email, company_name, location, bio, linkedin_url, tags, strength_score)",
+      )
+      .eq("id", prospectId)
+      .eq("run_id", runId)
+      .maybeSingle();
+    if (error) throw error;
+    if (row) {
+      const contactRaw = row.contact as
+        | PlaybookProspect["contact"]
+        | PlaybookProspect["contact"][]
+        | null;
+      const contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;
+      prospect = {
+        id: row.id,
+        run_id: row.run_id,
+        contact_id: row.contact_id,
+        match_score: row.match_score,
+        match_reason: row.match_reason,
+        matched_signals: row.matched_signals ?? [],
+        warm_path: row.warm_path ?? [],
+        status: row.status,
+        draft_subject: row.draft_subject,
+        draft_body: row.draft_body,
+        skip_reason: row.skip_reason,
+        last_action_at: row.last_action_at,
+        created_at: row.created_at,
+        current_sequence_step: row.current_sequence_step ?? 0,
+        next_action_at: row.next_action_at ?? null,
+        contact: contact ?? undefined,
+      } as PlaybookProspect;
+    }
+  } else {
+    const prospects = await listRunProspects(runId);
+    prospect = prospects.find((p) => p.id === prospectId);
+  }
+
   if (!prospect?.contact?.email) throw new Error("Contact has no email");
 
-  const run = await getPlaybookRun(runId);
-  const playbook = run ? await getPlaybook(run.playbook_id) : null;
+  const { data: runRow } = await supabase
+    .from("playbook_runs")
+    .select("*")
+    .eq("id", runId)
+    .maybeSingle();
+  const run = (runRow as PlaybookRun | null) ?? null;
+
+  let playbook: Playbook | null = null;
+  if (run?.playbook_id) {
+    const { data: pb } = await supabase
+      .from("playbooks")
+      .select("*")
+      .eq("id", run.playbook_id)
+      .maybeSingle();
+    playbook = (pb as Playbook | null) ?? null;
+  }
 
   if (isDataDemoMode()) {
     updateDemoProspect(prospectId, { status: "sent" });
@@ -855,13 +925,15 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     });
     if (playbook) {
       const { scheduleFollowUpForProspect } = await import("@/lib/data/playbook-sequences");
-      await scheduleFollowUpForProspect(prospectId, playbook, 0);
+      await scheduleFollowUpForProspect(
+        prospectId,
+        playbook,
+        prospect.current_sequence_step ?? 0,
+        actor,
+      );
     }
     return { sent: true, demo: true };
   }
-
-  const { supabase, user, workspaceId, profile } = await getUserWorkspaceContext();
-  if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
   if (run?.dry_run) {
     await logAuditEvent("playbook.dry_run_send", "playbook_run_contact", prospectId, {
@@ -908,9 +980,15 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     );
   }
 
+  const { data: senderProfile } = await supabase
+    .from("profiles")
+    .select("email, name")
+    .eq("id", userId)
+    .maybeSingle();
+
   const { from, replyTo } = resolveOutboundFromAddress(
     emailSettings,
-    user.email ?? profile?.email,
+    senderProfile?.email ?? (profile as { email?: string | null } | null)?.email ?? undefined,
     { runContactId: prospectId },
   );
 
@@ -941,10 +1019,24 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     }
   }
 
+  const { buildAudienceCta } = await import("@/lib/email/audience");
+  const { renderOutreachMarketingFooter } = await import("@/lib/email/platform-templates");
+  const audience = await buildAudienceCta({
+    email: prospect.contact.email,
+    deepLinkPath: "/",
+    onPlatformLabel: "Open Potentially",
+    offPlatformLabel: "Join Potentially",
+  });
+  const marketingFooter = await renderOutreachMarketingFooter({
+    inviteOrOpenUrl: audience.ctaUrl,
+    onPlatform: audience.onPlatform,
+    unsubscribeUrl,
+  });
+
   const emailResult = await sendEmail({
     to: prospect.contact.email,
     subject,
-    html: `${html}${calendlyBlock}<br><br><small><a href="${unsubscribeUrl}">Unsubscribe</a></small>`,
+    html: `${html}${calendlyBlock}${marketingFooter}`,
     headers: {
       "X-Potentially-Run-Contact": prospectId,
     },
@@ -983,7 +1075,7 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
     thread_id: (
       await ensureThread(supabase, workspaceId, prospect.contact_id, prospectId)
     ).id,
-    sender_user_id: user.id,
+    sender_user_id: userId,
     body: `Email sent: ${subject}`,
     message_type: "system",
     metadata: { channel: "email", audience: "sender", provider_message_id: emailResult?.id },
@@ -996,9 +1088,8 @@ export async function approveAndSendProspect(prospectId: string, runId: string) 
 
   if (playbook) {
     const { scheduleFollowUpForProspect } = await import("@/lib/data/playbook-sequences");
-    const currentStep =
-      (prospect as PlaybookProspect & { current_sequence_step?: number }).current_sequence_step ?? 0;
-    await scheduleFollowUpForProspect(prospectId, playbook, currentStep);
+    const currentStep = prospect.current_sequence_step ?? 0;
+    await scheduleFollowUpForProspect(prospectId, playbook, currentStep, actor);
   }
 
   return { sent: true, provider_message_id: emailResult?.id };
@@ -1106,7 +1197,75 @@ export async function listPlaybookRuns(playbookId: string) {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []) as PlaybookRun[];
+  const runs = (data ?? []) as PlaybookRun[];
+  if (!runs.length) return runs;
+
+  const runIds = runs.map((r) => r.id);
+  const { data: pendingRows } = await supabase
+    .from("playbook_run_contacts")
+    .select("run_id")
+    .in("run_id", runIds)
+    .eq("status", "pending_approval");
+
+  const counts = new Map<string, number>();
+  for (const row of pendingRows ?? []) {
+    const runId = row.run_id as string;
+    counts.set(runId, (counts.get(runId) ?? 0) + 1);
+  }
+
+  return runs.map((run) => ({
+    ...run,
+    pending_approval_count: counts.get(run.id) ?? 0,
+  }));
+}
+
+export async function listPendingApprovalsForPlaybook(
+  playbookId: string,
+): Promise<import("@/types/playbooks").PendingPlaybookApproval[]> {
+  if (isDataDemoMode()) return [];
+
+  const { supabase } = await getUserWorkspaceContext();
+  if (!supabase) return [];
+
+  const { data: runs, error: runsError } = await supabase
+    .from("playbook_runs")
+    .select("id")
+    .eq("playbook_id", playbookId);
+  if (runsError) throw runsError;
+  const runIds = (runs ?? []).map((r) => r.id as string);
+  if (!runIds.length) return [];
+
+  const { data, error } = await supabase
+    .from("playbook_run_contacts")
+    .select(
+      "id, run_id, contact_id, draft_subject, draft_body, current_sequence_step, last_action_at, created_at, contact:contacts(full_name, email, company_name)",
+    )
+    .in("run_id", runIds)
+    .eq("status", "pending_approval")
+    .order("last_action_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const contactRaw = row.contact as
+      | { full_name: string | null; email: string | null; company_name: string | null }
+      | { full_name: string | null; email: string | null; company_name: string | null }[]
+      | null;
+    const contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;
+    return {
+      id: row.id as string,
+      run_id: row.run_id as string,
+      contact_id: row.contact_id as string,
+      draft_subject: (row.draft_subject as string | null) ?? null,
+      draft_body: (row.draft_body as string | null) ?? null,
+      current_sequence_step: (row.current_sequence_step as number | null) ?? 0,
+      last_action_at: (row.last_action_at as string | null) ?? null,
+      created_at: row.created_at as string,
+      contact_name: contact?.full_name ?? null,
+      contact_email: contact?.email ?? null,
+      contact_company: contact?.company_name ?? null,
+    };
+  });
 }
 
 export async function getProspectThreadMessages(runContactId: string) {

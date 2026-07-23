@@ -37,10 +37,6 @@ export async function emailChatToContact(input: {
   body: string;
   runContactId: string;
 }) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:1020";
-  const inviteUrl = `${appUrl}/signup?email=${encodeURIComponent(input.to)}&redirect=${encodeURIComponent(`/chats/${input.runContactId}`)}`;
-  const chatUrl = `${appUrl}/chats/${input.runContactId}`;
-
   let emailSettings;
   try {
     const admin = createAdminClient();
@@ -55,8 +51,6 @@ export async function emailChatToContact(input: {
     senderName: input.senderName,
     senderWorkspaceName: input.senderWorkspaceName,
     body: input.body,
-    inviteUrl,
-    chatUrl,
     runContactId: input.runContactId,
     emailSettings,
     senderEmail: input.senderEmail,

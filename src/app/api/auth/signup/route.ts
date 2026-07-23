@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     const publicActionLink = ensurePublicActionLink(actionLink, request);
-    const template = signupVerificationEmail(name, publicActionLink);
+    const template = await signupVerificationEmail(name, publicActionLink);
     const delivery = await deliverAuthEmail({
       to: email,
       subject: template.subject,

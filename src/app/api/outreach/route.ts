@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateOutreach } from "@/lib/ai/openai";
+import { buildRecipientFacts } from "@/lib/ai/outreach-prompt";
 import { getContact } from "@/lib/data/contacts";
 import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       tone: params.tone,
       goal: params.goal,
       context: params.context,
+      recipientFacts: buildRecipientFacts(contact),
     });
 
     return NextResponse.json(result);

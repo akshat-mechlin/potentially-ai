@@ -383,7 +383,7 @@ export async function inviteWorkspaceMember(
     .single();
 
   const inviteLink = `${getAppUrl()}/signup?invite=${token}`;
-  const template = workspaceInviteEmail(workspace?.name ?? "your team", inviteLink);
+  const template = await workspaceInviteEmail(workspace?.name ?? "your team", inviteLink);
 
   try {
     await sendEmail({ to: email, subject: template.subject, html: template.html });
