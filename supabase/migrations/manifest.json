@@ -225,6 +225,12 @@
     "version": "20260724150000",
     "name": "intro_request_email_template",
     "file": "20260724150000_intro_request_email_template.sql",
-    "remote": "pending"
+    "remote": "applied"
+  },
+  {
+    "version": "20260724200000",
+    "name": "intro_recipient_visibility",
+    "file": "20260724200000_intro_recipient_visibility.sql",
+    "remote": "applied"
   }
 ]

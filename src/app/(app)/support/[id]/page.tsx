@@ -66,7 +66,7 @@ export default function SupportTicketPage() {
       void queryClient.invalidateQueries({ queryKey: ["support-unread"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     });
-  }, [enabled, params.id, data?.ticket?.id, queryClient]);
+  }, [enabled, params.id, data?.ticket?.id, queryClient, data?.ticket]);
 
   const replyMutation = useMutation({
     mutationFn: async () => {
@@ -132,9 +132,7 @@ export default function SupportTicketPage() {
             <CardContent className="space-y-2 p-4">
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">
-                  {m.is_staff
-                    ? "Potentially Support"
-                    : m.author?.name || m.author?.email || "You"}
+                  {m.is_staff ? "Potentially Support" : m.author?.name || m.author?.email || "You"}
                 </span>
                 <span>{formatRelativeTime(m.created_at)}</span>
               </div>
@@ -166,7 +164,9 @@ export default function SupportTicketPage() {
           </Button>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">This ticket is {ticket.status.replaceAll("_", " ")}.</p>
+        <p className="text-sm text-muted-foreground">
+          This ticket is {ticket.status.replaceAll("_", " ")}.
+        </p>
       )}
     </div>
   );

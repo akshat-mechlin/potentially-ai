@@ -4,6 +4,7 @@ import {
   getDemoContactById,
   getDemoIntroductions,
 } from "@/lib/demo-store";
+import { normalizeEmail } from "@/lib/contacts/contact-dedupe";
 import type { Contact, Introduction } from "@/types";
 import { introRequestEmail } from "@/lib/email/templates";
 import { resolveOutboundFromAddress } from "@/lib/email/from-address";
@@ -57,44 +58,148 @@ Learn more: ${input.ctaUrl}`;
   return { subject, body };
 }
 
-export async function listIntroductions(): Promise<Introduction[]> {
-  if (isDataDemoMode()) return getDemoIntroductions();
+function enrichIntroRows(
+  rows: Introduction[],
+  contactMap: Map<string, Contact>,
+  connectorMap: Map<string, string>,
+  requesterMap: Map<string, string>,
+  viewerEmail: string | null,
+  viewerUserId: string,
+): Introduction[] {
+  return rows.map((row) => {
+    const target = contactMap.get(row.target_contact_id);
+    const targetEmail = normalizeEmail(target?.email);
+    const received =
+      Boolean(viewerEmail) &&
+      Boolean(targetEmail) &&
+      targetEmail === viewerEmail &&
+      row.requester_id !== viewerUserId;
 
-  const { supabase, user } = await getUserWorkspaceContext();
+    return {
+      ...row,
+      target_contact: target,
+      connector_name: row.connector_id ? (connectorMap.get(row.connector_id) ?? null) : null,
+      requester_name: requesterMap.get(row.requester_id) ?? null,
+      direction: received ? ("received" as const) : ("sent" as const),
+    };
+  });
+}
+
+export async function listIntroductions(): Promise<Introduction[]> {
+  if (isDataDemoMode()) {
+    const intros = getDemoIntroductions();
+    return intros.map((intro, index) =>
+      index === 0
+        ? {
+            ...intro,
+            direction: "received" as const,
+            requester_name: "Jordan Lee",
+          }
+        : {
+            ...intro,
+            direction: "sent" as const,
+            requester_name: "Alex Morgan",
+          },
+    );
+  }
+
+  const { supabase, user, profile } = await getUserWorkspaceContext();
   if (!supabase || !user) throw new Error("Unauthorized");
 
+  const viewerEmail =
+    normalizeEmail((profile as { email?: string | null } | null)?.email) ||
+    normalizeEmail(user.email);
   const workspaceIds = (await listUserWorkspaces(supabase)).map((workspace) => workspace.id);
-  if (!workspaceIds.length) return [];
 
-  const { data: rows, error } = await supabase
-    .from("introductions")
-    .select("*")
-    .in("workspace_id", workspaceIds)
-    .order("created_at", { ascending: false });
+  const byId = new Map<string, Introduction>();
 
-  if (error) throw error;
-  if (!rows?.length) return [];
+  if (workspaceIds.length) {
+    const { data: workspaceRows, error } = await supabase
+      .from("introductions")
+      .select("*")
+      .in("workspace_id", workspaceIds)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    for (const row of workspaceRows ?? []) {
+      byId.set(row.id, row as Introduction);
+    }
+  }
 
-  const contactIds = rows.map((r) => r.target_contact_id);
-  const connectorIds = rows.map((r) => r.connector_id).filter(Boolean) as string[];
+  // Intros emailed to the viewer's address (may live in other workspaces).
+  if (viewerEmail) {
+    try {
+      const admin = createAdminClient();
+      const { data: matchingContacts } = await admin
+        .from("contacts")
+        .select("id")
+        .ilike("email", viewerEmail);
 
-  const [{ data: contacts }, { data: connectors }] = await Promise.all([
-    supabase.from("contacts").select("*").in("id", contactIds),
-    connectorIds.length
-      ? supabase.from("profiles").select("id, name").in("id", connectorIds)
-      : Promise.resolve({ data: [] }),
-  ]);
+      const targetIds = (matchingContacts ?? []).map((c) => c.id as string);
+      if (targetIds.length) {
+        const { data: receivedRows } = await admin
+          .from("introductions")
+          .select("*")
+          .in("target_contact_id", targetIds)
+          .order("created_at", { ascending: false });
 
-  const contactMap = new Map((contacts as Contact[] | null)?.map((c) => [c.id, c]) ?? []);
-  const connectorMap = new Map(
-    (connectors as { id: string; name: string }[] | null)?.map((c) => [c.id, c.name]) ?? [],
+        for (const row of receivedRows ?? []) {
+          if (!byId.has(row.id)) {
+            byId.set(row.id, row as Introduction);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load received introductions:", error);
+    }
+  }
+
+  const rows = Array.from(byId.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  if (!rows.length) return [];
+
+  const contactIds = [...new Set(rows.map((r) => r.target_contact_id))];
+  const connectorIds = [
+    ...new Set(rows.map((r) => r.connector_id).filter(Boolean) as string[]),
+  ];
+  const requesterIds = [...new Set(rows.map((r) => r.requester_id))];
+
+  let contacts: Contact[] = [];
+  let connectors: { id: string; name: string }[] = [];
+  let requesters: { id: string; name: string | null }[] = [];
+
+  try {
+    const admin = createAdminClient();
+    const [contactsRes, connectorsRes, requestersRes] = await Promise.all([
+      admin.from("contacts").select("*").in("id", contactIds),
+      connectorIds.length
+        ? admin.from("profiles").select("id, name").in("id", connectorIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      admin.from("profiles").select("id, name").in("id", requesterIds),
+    ]);
+    contacts = (contactsRes.data as Contact[] | null) ?? [];
+    connectors = (connectorsRes.data as { id: string; name: string }[] | null) ?? [];
+    requesters = (requestersRes.data as { id: string; name: string | null }[] | null) ?? [];
+  } catch {
+    const [contactsRes, connectorsRes, requestersRes] = await Promise.all([
+      supabase.from("contacts").select("*").in("id", contactIds),
+      connectorIds.length
+        ? supabase.from("profiles").select("id, name").in("id", connectorIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      supabase.from("profiles").select("id, name").in("id", requesterIds),
+    ]);
+    contacts = (contactsRes.data as Contact[] | null) ?? [];
+    connectors = (connectorsRes.data as { id: string; name: string }[] | null) ?? [];
+    requesters = (requestersRes.data as { id: string; name: string | null }[] | null) ?? [];
+  }
+
+  const contactMap = new Map(contacts.map((c) => [c.id, c]));
+  const connectorMap = new Map(connectors.map((c) => [c.id, c.name]));
+  const requesterMap = new Map(
+    requesters.map((r) => [r.id, r.name?.trim() || "Someone"] as const),
   );
 
-  return rows.map((row) => ({
-    ...(row as Introduction),
-    target_contact: contactMap.get(row.target_contact_id),
-    connector_name: row.connector_id ? (connectorMap.get(row.connector_id) ?? null) : null,
-  }));
+  return enrichIntroRows(rows, contactMap, connectorMap, requesterMap, viewerEmail, user.id);
 }
 
 export async function createIntroduction(
@@ -129,6 +234,7 @@ export async function createIntroduction(
     return {
       ...intro,
       delivery,
+      direction: "sent",
       target_name: contact.full_name,
       mailto: {
         to: contact.email,
@@ -252,10 +358,38 @@ export async function createIntroduction(
     link: "/intros",
   });
 
+  // Notify the recipient if they already have a Potentially account with this email.
+  try {
+    const admin = createAdminClient();
+    const recipientEmail = normalizeEmail(contact.email);
+    if (recipientEmail) {
+      const { data: recipientProfiles } = await admin
+        .from("profiles")
+        .select("id")
+        .ilike("email", recipientEmail)
+        .neq("id", userId)
+        .limit(5);
+      for (const recipient of recipientProfiles ?? []) {
+        await admin.from("notifications").insert({
+          user_id: recipient.id,
+          workspace_id: workspaceId,
+          title: "Introduction request",
+          message: `${requesterName} on Potentially would like an introduction to you`,
+          type: "intro",
+          link: "/intros",
+        });
+      }
+    }
+  } catch (notifyError) {
+    console.error("Failed to notify intro recipient:", notifyError);
+  }
+
   return {
     ...(data as Introduction),
     target_contact: fullContact.data as Contact,
     connector_name: null,
+    direction: "sent",
+    requester_name: requesterName,
     delivery,
     mailto,
     email_skipped: emailSkipped,

@@ -117,7 +117,7 @@ async function autoSyncCustomDomain(
       })
       .eq("id", workspaceId)
       .select(workspaceEmailColumns)
-      .single();
+      .maybeSingle();
 
     if (error || !updated) return workspace;
     return updated as WorkspaceEmailRow;
@@ -144,7 +144,7 @@ export async function getWorkspaceEmailSettings(workspaceId?: string | null) {
   }
 
   const [{ data: workspace, error }, { data: membership }] = await Promise.all([
-    supabase.from("workspaces").select(workspaceEmailColumns).eq("id", targetWorkspaceId).single(),
+    supabase.from("workspaces").select(workspaceEmailColumns).eq("id", targetWorkspaceId).maybeSingle(),
     supabase
       .from("workspace_members")
       .select("role")
@@ -218,7 +218,7 @@ export async function updateWorkspaceEmailSettings(
     .from("workspaces")
     .select(workspaceEmailColumns)
     .eq("id", targetWorkspaceId)
-    .single();
+    .maybeSingle();
 
   if (existingError || !existing) {
     throw existingError ?? new Error("Workspace not found");
@@ -273,7 +273,7 @@ export async function updateWorkspaceEmailSettings(
     })
     .eq("id", targetWorkspaceId)
     .select(workspaceEmailColumns)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     throw error ?? new Error("Failed to update email settings");
@@ -312,7 +312,7 @@ export async function setupWorkspaceSenderDomain(workspaceId?: string | null) {
     .from("workspaces")
     .select(workspaceEmailColumns)
     .eq("id", targetWorkspaceId)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     throw error ?? new Error("Workspace not found");
@@ -339,7 +339,7 @@ export async function setupWorkspaceSenderDomain(workspaceId?: string | null) {
     })
     .eq("id", targetWorkspaceId)
     .select(workspaceEmailColumns)
-    .single();
+    .maybeSingle();
 
   if (updateError || !updated) {
     throw updateError ?? new Error("Failed to save domain setup");
@@ -377,7 +377,7 @@ export async function verifyWorkspaceSenderDomain(workspaceId?: string | null) {
     .from("workspaces")
     .select(workspaceEmailColumns)
     .eq("id", targetWorkspaceId)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     throw error ?? new Error("Workspace not found");
@@ -404,7 +404,7 @@ export async function verifyWorkspaceSenderDomain(workspaceId?: string | null) {
     })
     .eq("id", targetWorkspaceId)
     .select(workspaceEmailColumns)
-    .single();
+    .maybeSingle();
 
   if (updateError || !updated) {
     throw updateError ?? new Error("Failed to update domain status");
@@ -449,7 +449,7 @@ export async function configureWorkspaceSenderDomain(workspaceId?: string | null
     .from("workspaces")
     .select(workspaceEmailColumns)
     .eq("id", targetWorkspaceId)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     throw error ?? new Error("Workspace not found");
@@ -474,7 +474,7 @@ export async function configureWorkspaceSenderDomain(workspaceId?: string | null
     })
     .eq("id", targetWorkspaceId)
     .select(workspaceEmailColumns)
-    .single();
+    .maybeSingle();
 
   if (updateError || !updated) {
     throw updateError ?? new Error("Failed to save domain configuration");
@@ -517,7 +517,7 @@ export async function markWorkspaceSenderDomainVerified(workspaceId?: string | n
     .from("workspaces")
     .select(workspaceEmailColumns)
     .eq("id", targetWorkspaceId)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     throw error ?? new Error("Workspace not found");
@@ -536,7 +536,7 @@ export async function markWorkspaceSenderDomainVerified(workspaceId?: string | n
     })
     .eq("id", targetWorkspaceId)
     .select(workspaceEmailColumns)
-    .single();
+    .maybeSingle();
 
   if (updateError || !updated) {
     throw updateError ?? new Error("Failed to mark domain as verified");
@@ -553,7 +553,7 @@ export async function getWorkspaceEmailSettingsForSend(
     .from("workspaces")
     .select(`${workspaceEmailColumns}`)
     .eq("id", workspaceId)
-    .single();
+    .maybeSingle();
 
   if (error || !workspace) {
     return {

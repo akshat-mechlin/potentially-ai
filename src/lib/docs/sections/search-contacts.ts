@@ -340,7 +340,7 @@ export const contactsSection: DocSection = {
         },
         {
           type: "paragraph",
-          text: "Introductions live under Introductions in the sidebar and can be started from a contact with Request intro. That emails the contact that you would like an introduction, via your mail app or Potentially when workspace email is configured. Statuses move through draft, requested, accepted, declined, and completed.",
+          text: "Introductions live under Introductions in the sidebar and can be started from a contact with Request intro. That emails the contact that you would like an introduction, via your mail app or Potentially when workspace email is configured. The tab shows Sent requests and Received requests when someone else emailed a contact whose address matches yours. Statuses move through draft, requested, accepted, declined, and completed.",
         },
         {
           type: "steps",

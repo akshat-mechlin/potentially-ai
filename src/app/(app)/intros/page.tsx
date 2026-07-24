@@ -9,6 +9,7 @@ import {
   MobileEmpty,
   MobileFab,
   MobileMenuList,
+  MobileSegmented,
 } from "@/components/mobile/primitives";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import { useOutreachEnabled } from "@/hooks/use-feature-flags";
@@ -36,6 +38,8 @@ import { getInitials, formatRelativeTime } from "@/lib/utils";
 import type { Contact, Introduction, WorkspaceEmailSettings } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+
+type IntroTab = "sent" | "received";
 
 const statusConfig = {
   draft: { icon: Clock, label: "Draft", color: "text-muted-foreground" },
@@ -55,6 +59,7 @@ export default function IntrosPage() {
   const [open, setOpen] = useState(false);
   const [contactId, setContactId] = useState("");
   const [submitting, setSubmitting] = useState<"mailto" | "potentially" | null>(null);
+  const [activeTab, setActiveTab] = useState<IntroTab>("sent");
   const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
@@ -128,6 +133,7 @@ export default function IntrosPage() {
       }
 
       await queryClient.invalidateQueries({ queryKey: ["intros"] });
+      setActiveTab("sent");
       setOpen(false);
       setContactId("");
     } catch (error) {
@@ -138,6 +144,66 @@ export default function IntrosPage() {
   };
 
   const introductions = introsData?.introductions ?? [];
+  const receivedIntros = introductions.filter((intro) => intro.direction === "received");
+  const sentIntros = introductions.filter((intro) => intro.direction !== "received");
+
+  const renderIntroCard = (intro: Introduction, compact = false) => {
+    const contact = intro.target_contact;
+    const config = statusConfig[intro.status];
+    const StatusIcon = config.icon;
+    const received = intro.direction === "received";
+    const title = received
+      ? intro.requester_name || "Someone on Potentially"
+      : contact?.full_name || "Unknown contact";
+    const subtitle = received
+      ? "Would like an introduction to you"
+      : [contact?.title, contact?.company_name].filter(Boolean).join(" at ") ||
+        contact?.email ||
+        "Intro request you sent";
+
+    if (compact) {
+      return (
+        <div key={intro.id} className="mobile-list-row">
+          <Avatar className="h-10 w-10 shrink-0">
+            <AvatarFallback>{getInitials(title)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{title}</p>
+            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+          </div>
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {config.label}
+          </Badge>
+        </div>
+      );
+    }
+
+    return (
+      <Card key={intro.id}>
+        <CardContent className="flex items-center gap-4 p-4">
+          <Avatar className="h-10 w-10">
+            <AvatarFallback>{getInitials(title)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="font-medium">{title}</p>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+            {!received && intro.connector_name ? (
+              <p className="mt-1 text-xs text-muted-foreground">Via {intro.connector_name}</p>
+            ) : null}
+          </div>
+          <div className="text-right">
+            <div className={`flex items-center gap-1 text-sm ${config.color}`}>
+              <StatusIcon className="h-4 w-4" />
+              {config.label}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatRelativeTime(intro.created_at)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const requestDialog = (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -206,32 +272,35 @@ export default function IntrosPage() {
   if (isMobileApp) {
     return (
       <>
-        {isLoading ? (
-          <MobileEmpty>Loading...</MobileEmpty>
-        ) : (
-          <MobileMenuList>
-            {introductions.map((intro) => {
-              const contact = intro.target_contact;
-              if (!contact) return null;
-              const config = statusConfig[intro.status];
-              return (
-                <div key={intro.id} className="mobile-list-row">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{contact.full_name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{contact.company_name}</p>
-                  </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {config.label}
-                  </Badge>
-                </div>
-              );
-            })}
-            {!introductions.length && <MobileEmpty>No introductions yet</MobileEmpty>}
-          </MobileMenuList>
-        )}
+        <div className="space-y-4 pb-24">
+          <MobileSegmented
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              { value: "sent", label: `Sent${sentIntros.length ? ` (${sentIntros.length})` : ""}` },
+              {
+                value: "received",
+                label: `Received${receivedIntros.length ? ` (${receivedIntros.length})` : ""}`,
+              },
+            ]}
+          />
+
+          {isLoading ? (
+            <MobileEmpty>Loading...</MobileEmpty>
+          ) : activeTab === "sent" ? (
+            <MobileMenuList>
+              {sentIntros.map((intro) => renderIntroCard(intro, true))}
+              {!sentIntros.length ? <MobileEmpty>No sent introductions yet</MobileEmpty> : null}
+            </MobileMenuList>
+          ) : (
+            <MobileMenuList>
+              {receivedIntros.map((intro) => renderIntroCard(intro, true))}
+              {!receivedIntros.length ? (
+                <MobileEmpty>No received introductions yet</MobileEmpty>
+              ) : null}
+            </MobileMenuList>
+          )}
+        </div>
 
         <MobileFab onClick={() => setOpen(true)} label="Request intro">
           <Plus className="h-6 w-6" />
@@ -244,49 +313,40 @@ export default function IntrosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sub text-muted-foreground">Track and manage warm introduction requests</p>
+        <p className="text-sub text-muted-foreground">
+          Track requests you sent and intros others sent to you
+        </p>
         <Button onClick={() => setOpen(true)}>Request intro</Button>
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading introductions...</p>
-      ) : (
-        <div className="space-y-4">
-          {introductions.map((intro) => {
-            const contact = intro.target_contact;
-            if (!contact) return null;
-            const config = statusConfig[intro.status];
-            const StatusIcon = config.icon;
-            return (
-              <Card key={intro.id}>
-                <CardContent className="flex items-center gap-4 p-4">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback>{getInitials(contact.full_name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-medium">{contact.full_name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {contact.title} at {contact.company_name}
-                    </p>
-                    {intro.connector_name && (
-                      <p className="mt-1 text-xs text-muted-foreground">Via {intro.connector_name}</p>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div className={`flex items-center gap-1 text-sm ${config.color}`}>
-                      <StatusIcon className="h-4 w-4" />
-                      {config.label}
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatRelativeTime(intro.created_at)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as IntroTab)}>
+        <TabsList>
+          <TabsTrigger value="sent">Sent{sentIntros.length ? ` (${sentIntros.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="received">
+            Received{receivedIntros.length ? ` (${receivedIntros.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sent" className="space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading introductions...</p>
+          ) : sentIntros.length ? (
+            sentIntros.map((intro) => renderIntroCard(intro))
+          ) : (
+            <p className="text-sm text-muted-foreground">No sent introductions yet.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="received" className="space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading introductions...</p>
+          ) : receivedIntros.length ? (
+            receivedIntros.map((intro) => renderIntroCard(intro))
+          ) : (
+            <p className="text-sm text-muted-foreground">No received introductions yet.</p>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {requestDialog}
     </div>
