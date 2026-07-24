@@ -306,7 +306,7 @@ export const contactsSection: DocSection = {
         },
         {
           type: "paragraph",
-          text: "On a contact, open the Outreach tab. Choose type (cold email, warm intro, LinkedIn), tone, and goal, then generate a draft. Copy or refine the text before you send from your own mailbox or a playbook run.",
+          text: "On a contact, open the Outreach tab. Choose type (cold email, warm intro, LinkedIn), tone, and goal, then generate a draft. Edit the subject, body, and CTA as needed. Send from your mail app, or send with Potentially when workspace email is configured.",
         },
         {
           type: "steps",
@@ -314,7 +314,7 @@ export const contactsSection: DocSection = {
             "Open a contact → Outreach",
             "Pick type, tone, and goal",
             "Click generate and review the draft",
-            "Use Request intro when you need a teammate to make the connection",
+            "Use Request intro to email the contact that you would like an introduction",
           ],
         },
         {
@@ -340,13 +340,13 @@ export const contactsSection: DocSection = {
         },
         {
           type: "paragraph",
-          text: "Introductions live under Introductions in the sidebar and can be started from a contact with Request intro. Statuses move through draft, requested, accepted, declined, and completed so the team can track outcomes.",
+          text: "Introductions live under Introductions in the sidebar and can be started from a contact with Request intro. That emails the contact that you would like an introduction, via your mail app or Potentially when workspace email is configured. Statuses move through draft, requested, accepted, declined, and completed.",
         },
         {
           type: "steps",
           items: [
             "Open a contact or go to Introductions",
-            "Request an intro and add context for the connector",
+            "Request an intro. Email goes to the contact",
             "Watch status updates as the request progresses",
             "Mark completed when the introduction is done",
           ],

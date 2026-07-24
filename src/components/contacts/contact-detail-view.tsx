@@ -13,20 +13,29 @@ import {
   Send,
   Loader2,
 } from "lucide-react";
-import type { Contact, OutreachResult } from "@/types";
+import type { Contact, OutreachResult, WorkspaceEmailSettings } from "@/types";
 import type { MutualConnection } from "@/lib/data/mutual-connections";
 import { MobileHeaderTitle } from "@/components/layout/mobile-header-title";
 import {
   DesktopOnly,
   MobileKpiStrip,
   MobileSegmented,
+  MOBILE_BOTTOM_SHEET,
 } from "@/components/mobile/primitives";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -40,8 +49,24 @@ import type { ContactDetailPoint } from "@/lib/contacts/profile-details";
 import { ContactProfileSummary } from "@/components/contacts/contact-profile-summary";
 import { InfoHint } from "@/components/playbooks/field-hint";
 import { useOutreachEnabled } from "@/hooks/use-feature-flags";
+import { useWorkspaceStore } from "@/stores";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
+
+function canSendViaPotentially(settings: WorkspaceEmailSettings | undefined) {
+  if (!settings) return false;
+  if (settings.mode === "platform") return true;
+  return settings.senderDomainStatus === "verified";
+}
+
+function buildMailtoHref(email: string, draft: OutreachResult) {
+  const subject = draft.subject?.trim() ?? "";
+  const body = [draft.body.trim(), draft.cta.trim()].filter(Boolean).join("\n\n");
+  const parts: string[] = [];
+  if (subject) parts.push(`subject=${encodeURIComponent(subject)}`);
+  if (body) parts.push(`body=${encodeURIComponent(body)}`);
+  return parts.length ? `mailto:${email}?${parts.join("&")}` : `mailto:${email}`;
+}
 
 type ContactTab = "overview" | "timeline" | "outreach";
 
@@ -59,6 +84,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const defaultTab: ContactTab = searchParams.get("tab") === "outreach" ? "outreach" : "overview";
   const { isMobileApp } = useMobileApp();
   const { enabled: outreachEnabled } = useOutreachEnabled();
+  const workspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
   const [activeTab, setActiveTab] = useState<ContactTab>(
     defaultTab === "outreach" && !outreachEnabled ? "overview" : defaultTab,
   );
@@ -68,7 +94,10 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const [tone, setTone] = useState<"professional" | "casual" | "friendly">("professional");
   const [goal, setGoal] = useState("Schedule a 15-minute intro call");
   const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState(false);
   const [outreach, setOutreach] = useState<OutreachResult | null>(null);
+  const [introOpen, setIntroOpen] = useState(false);
+  const [requestingIntro, setRequestingIntro] = useState<"mailto" | "potentially" | null>(null);
 
   const { data: contact, isLoading } = useQuery<Contact>({
     queryKey: ["contact", id],
@@ -78,6 +107,18 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
       return res.json();
     },
   });
+
+  const { data: emailSettings } = useQuery<WorkspaceEmailSettings>({
+    queryKey: ["workspace-email-settings", workspaceId],
+    queryFn: async () => {
+      const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+      const res = await fetch(`/api/workspace/email-settings${params}`);
+      if (!res.ok) throw new Error("Failed to load email settings");
+      return res.json();
+    },
+    enabled: outreachEnabled,
+  });
+  const potentiallySendReady = canSendViaPotentially(emailSettings);
 
   const { data: mutualPayload, isLoading: mutualsLoading } = useQuery<{
     mutuals: MutualConnection[];
@@ -136,7 +177,11 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate outreach");
-      setOutreach(data);
+      setOutreach({
+        subject: data.subject ?? "",
+        body: data.body ?? "",
+        cta: data.cta ?? "",
+      });
       toast.success("Outreach generated");
     } catch {
       toast.error("Failed to generate outreach");
@@ -145,19 +190,67 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
     }
   };
 
-  const handleRequestIntro = async () => {
+  const handleSendViaPotentially = async () => {
+    if (!outreach || !contact.email) return;
+    setSending(true);
     try {
-      const res = await fetch("/api/intros", {
+      const res = await fetch("/api/outreach/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_contact_id: id }),
+        body: JSON.stringify({
+          contact_id: id,
+          subject: outreach.subject,
+          body: outreach.body,
+          cta: outreach.cta,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to request introduction");
-      toast.success("Introduction requested");
+      if (!res.ok) throw new Error(data.error || "Failed to send email");
+      toast.success(data.skipped ? "Email logged (send skipped in this environment)" : "Email sent");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to request introduction");
+      toast.error(error instanceof Error ? error.message : "Failed to send email");
+    } finally {
+      setSending(false);
     }
+  };
+
+  const handleRequestIntro = (delivery: "mailto" | "potentially") => {
+    setRequestingIntro(delivery);
+    void (async () => {
+      try {
+        const res = await fetch("/api/intros", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target_contact_id: id, delivery }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to request introduction");
+
+        if (delivery === "mailto") {
+          const href = data.mailto?.href as string | undefined;
+          if (!href) throw new Error("Could not build mail app link");
+          window.location.href = href;
+          toast.success(
+            data.target_name
+              ? `Intro request opened for ${data.target_name}`
+              : "Intro request opened in your mail app",
+          );
+        } else {
+          toast.success(
+            data.email_skipped
+              ? "Intro logged (send skipped in this environment)"
+              : data.target_name
+                ? `Intro request emailed to ${data.target_name}`
+                : "Intro request emailed",
+          );
+        }
+        setIntroOpen(false);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to request introduction");
+      } finally {
+        setRequestingIntro(null);
+      }
+    })();
   };
 
   const timelineEvents = [
@@ -165,6 +258,57 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
     { type: "meeting", title: "Coffee chat", date: contact.created_at },
     { type: "linkedin", title: "Connected on LinkedIn", date: contact.created_at },
   ];
+
+  const introDialog = (
+    <Dialog open={introOpen} onOpenChange={setIntroOpen}>
+      <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
+        <DialogHeader>
+          <DialogTitle>Request intro</DialogTitle>
+          <DialogDescription>
+            Tell {contact.full_name} that you would like an introduction on Potentially. Choose your
+            mail app or send from Potentially when email is configured.
+          </DialogDescription>
+        </DialogHeader>
+        <div className={`flex flex-col gap-2 pb-[env(safe-area-inset-bottom)] sm:pb-0 ${isMobileApp ? "" : "sm:flex-row"}`}>
+          <Button
+            variant="outline"
+            className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+            disabled={requestingIntro !== null}
+            onClick={() => handleRequestIntro("mailto")}
+          >
+            {requestingIntro === "mailto" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="mr-2 h-4 w-4" />
+            )}
+            Open in mail app
+          </Button>
+          {potentiallySendReady ? (
+            <Button
+              className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+              disabled={requestingIntro !== null}
+              onClick={() => handleRequestIntro("potentially")}
+            >
+              {requestingIntro === "potentially" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Send with Potentially
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground sm:self-center">
+              Configure email in{" "}
+              <Link href="/settings" className="underline underline-offset-2">
+                Settings
+              </Link>{" "}
+              to send from Potentially.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 
   const outreachForm = (
     <div className="space-y-4">
@@ -210,19 +354,74 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
       </Button>
       {outreach && (
         <div className={`space-y-3 rounded-xl bg-muted/30 p-4 ${isMobileApp ? "mobile-card-flat" : "border"}`}>
-          {outreach.subject && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">Subject</p>
-              <p className="text-sm font-medium">{outreach.subject}</p>
-            </div>
-          )}
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">Body</p>
-            <p className="whitespace-pre-wrap text-sm">{outreach.body}</p>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-subject">
+              Subject
+            </label>
+            <Input
+              id="outreach-subject"
+              value={outreach.subject ?? ""}
+              onChange={(e) => setOutreach({ ...outreach, subject: e.target.value })}
+              placeholder="Email subject"
+            />
           </div>
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">CTA</p>
-            <p className="text-sm">{outreach.cta}</p>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-body">
+              Body
+            </label>
+            <Textarea
+              id="outreach-body"
+              value={outreach.body}
+              onChange={(e) => setOutreach({ ...outreach, body: e.target.value })}
+              rows={8}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-cta">
+              CTA
+            </label>
+            <Textarea
+              id="outreach-cta"
+              value={outreach.cta}
+              onChange={(e) => setOutreach({ ...outreach, cta: e.target.value })}
+              rows={2}
+            />
+          </div>
+          <div className={`flex flex-wrap gap-2 ${isMobileApp ? "flex-col" : ""}`}>
+            {contact.email ? (
+              <Button variant="outline" size="sm" className={isMobileApp ? "w-full rounded-xl" : undefined} asChild>
+                <a href={buildMailtoHref(contact.email, outreach)}>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Open in mail app
+                </a>
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">Add an email on this contact to send.</p>
+            )}
+            {contact.email && potentiallySendReady ? (
+              <Button
+                size="sm"
+                className={isMobileApp ? "w-full rounded-xl" : undefined}
+                onClick={handleSendViaPotentially}
+                disabled={sending || !outreach.body.trim()}
+              >
+                {sending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                Send with Potentially
+              </Button>
+            ) : null}
+            {contact.email && !potentiallySendReady ? (
+              <p className="w-full text-xs text-muted-foreground">
+                Configure email in{" "}
+                <Link href="/settings" className="underline underline-offset-2">
+                  Settings
+                </Link>{" "}
+                to send from Potentially.
+              </p>
+            ) : null}
           </div>
         </div>
       )}
@@ -248,9 +447,11 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
               )}
               <div className="mt-2 flex flex-wrap gap-2">
                 {contact.email && (
-                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs">
-                    <Mail className="mr-1 h-3 w-3" />
-                    Email
+                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs" asChild>
+                    <a href={`mailto:${contact.email}`}>
+                      <Mail className="mr-1 h-3 w-3" />
+                      Email
+                    </a>
                   </Button>
                 )}
                 {contact.linkedin_url && (
@@ -261,7 +462,12 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                     </a>
                   </Button>
                 )}
-                <Button size="sm" className="h-8 rounded-full px-3 text-xs" onClick={handleRequestIntro}>
+                <Button
+                  size="sm"
+                  className="h-8 rounded-full px-3 text-xs"
+                  onClick={() => setIntroOpen(true)}
+                  disabled={!contact.email}
+                >
                   <Send className="mr-1 h-3 w-3" />
                   Intro
                 </Button>
@@ -360,6 +566,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
             <div className="mobile-card-flat p-4">{outreachForm}</div>
           )}
         </div>
+        {introDialog}
       </>
     );
   }
@@ -390,9 +597,11 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           )}
           <div className="mt-3 flex gap-2">
             {contact.email && (
-              <Button variant="outline" size="sm">
-                <Mail className="mr-1 h-3 w-3" />
-                Email
+              <Button variant="outline" size="sm" asChild>
+                <a href={`mailto:${contact.email}`}>
+                  <Mail className="mr-1 h-3 w-3" />
+                  Email
+                </a>
               </Button>
             )}
             {contact.linkedin_url && (
@@ -403,7 +612,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                 </a>
               </Button>
             )}
-            <Button size="sm" onClick={handleRequestIntro}>
+            <Button size="sm" onClick={() => setIntroOpen(true)} disabled={!contact.email}>
               <Send className="mr-1 h-3 w-3" />
               Request intro
             </Button>
@@ -517,6 +726,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           </Card>
         </TabsContent>
       </Tabs>
+      {introDialog}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Handshake, Clock, CheckCircle, XCircle, Loader2, Plus } from "lucide-react";
+import { Handshake, Clock, CheckCircle, XCircle, Loader2, Plus, Mail, Send } from "lucide-react";
 import {
   MOBILE_BOTTOM_SHEET,
   MobileEmpty,
@@ -16,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -29,8 +31,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import { useOutreachEnabled } from "@/hooks/use-feature-flags";
+import { useWorkspaceStore } from "@/stores";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
-import type { Contact, Introduction } from "@/types";
+import type { Contact, Introduction, WorkspaceEmailSettings } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -42,12 +45,19 @@ const statusConfig = {
   completed: { icon: CheckCircle, label: "Completed", color: "text-green-600" },
 };
 
+function canSendViaPotentially(settings: WorkspaceEmailSettings | undefined) {
+  if (!settings) return false;
+  if (settings.mode === "platform") return true;
+  return settings.senderDomainStatus === "verified";
+}
+
 export default function IntrosPage() {
   const [open, setOpen] = useState(false);
   const [contactId, setContactId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<"mailto" | "potentially" | null>(null);
   const { isMobileApp } = useMobileApp();
   const queryClient = useQueryClient();
+  const workspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
   const { enabled: outreachEnabled, loading: flagLoading } = useOutreachEnabled();
 
   const { data: introsData, isLoading } = useQuery<{ introductions: Introduction[] }>({
@@ -62,6 +72,18 @@ export default function IntrosPage() {
     enabled: outreachEnabled,
   });
 
+  const { data: emailSettings } = useQuery<WorkspaceEmailSettings>({
+    queryKey: ["workspace-email-settings", workspaceId],
+    queryFn: async () => {
+      const params = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+      const res = await fetch(`/api/workspace/email-settings${params}`);
+      if (!res.ok) throw new Error("Failed to load email settings");
+      return res.json();
+    },
+    enabled: outreachEnabled,
+  });
+  const potentiallySendReady = canSendViaPotentially(emailSettings);
+
   if (flagLoading) {
     return <Skeleton className="h-40 rounded-2xl" />;
   }
@@ -70,30 +92,48 @@ export default function IntrosPage() {
     return <FeatureDisabled title="Outreach / introductions" flag="outreach_engine" />;
   }
 
-  const handleRequest = async () => {
+  const handleRequest = async (delivery: "mailto" | "potentially") => {
     if (!contactId) {
       toast.error("Select a contact");
       return;
     }
 
-    setSubmitting(true);
+    setSubmitting(delivery);
     try {
       const res = await fetch("/api/intros", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_contact_id: contactId }),
+        body: JSON.stringify({ target_contact_id: contactId, delivery }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to request introduction");
 
+      if (delivery === "mailto") {
+        const href = data.mailto?.href as string | undefined;
+        if (!href) throw new Error("Could not build mail app link");
+        window.location.href = href;
+        toast.success(
+          data.target_name
+            ? `Intro request opened for ${data.target_name}`
+            : "Intro request opened in your mail app",
+        );
+      } else {
+        toast.success(
+          data.email_skipped
+            ? "Intro logged (send skipped in this environment)"
+            : data.target_name
+              ? `Intro request emailed to ${data.target_name}`
+              : "Intro request emailed",
+        );
+      }
+
       await queryClient.invalidateQueries({ queryKey: ["intros"] });
-      toast.success("Introduction requested");
       setOpen(false);
       setContactId("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to request introduction");
     } finally {
-      setSubmitting(false);
+      setSubmitting(null);
     }
   };
 
@@ -104,6 +144,9 @@ export default function IntrosPage() {
       <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
         <DialogHeader>
           <DialogTitle>Request intro</DialogTitle>
+          <DialogDescription>
+            Choose a contact, then email them that you would like an introduction on Potentially.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
           <Select value={contactId} onValueChange={setContactId}>
@@ -118,10 +161,43 @@ export default function IntrosPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={handleRequest} disabled={submitting} className="w-full rounded-xl">
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit
-          </Button>
+          <div className={`flex flex-col gap-2 ${isMobileApp ? "" : "sm:flex-row"}`}>
+            <Button
+              variant="outline"
+              onClick={() => void handleRequest("mailto")}
+              disabled={submitting !== null}
+              className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+            >
+              {submitting === "mailto" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="mr-2 h-4 w-4" />
+              )}
+              Open in mail app
+            </Button>
+            {potentiallySendReady ? (
+              <Button
+                onClick={() => void handleRequest("potentially")}
+                disabled={submitting !== null}
+                className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+              >
+                {submitting === "potentially" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                Send with Potentially
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground sm:self-center">
+                Configure email in{" "}
+                <Link href="/settings" className="underline underline-offset-2">
+                  Settings
+                </Link>{" "}
+                to send from Potentially.
+              </p>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

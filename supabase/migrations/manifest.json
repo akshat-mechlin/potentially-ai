@@ -220,5 +220,11 @@
     "name": "platform_email_templates",
     "file": "20260721120000_platform_email_templates.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260724150000",
+    "name": "intro_request_email_template",
+    "file": "20260724150000_intro_request_email_template.sql",
+    "remote": "pending"
   }
 ]
