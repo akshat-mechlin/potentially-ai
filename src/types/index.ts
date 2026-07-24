@@ -152,6 +152,9 @@ export interface Introduction {
   updated_at?: string;
   target_contact?: Contact;
   connector_name?: string | null;
+  /** Whether you sent this request or received it (target contact email matches yours). */
+  direction?: "sent" | "received";
+  requester_name?: string | null;
 }
 
 export interface SearchResult {

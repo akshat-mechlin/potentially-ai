@@ -155,7 +155,7 @@ export function renderBrandedEmail(content: BrandedEmailContent) {
                 ${MARKETING_TAGLINE}
               </p>
               <p style="margin:8px 0 0;font-family:${FONT_SERIF};font-size:15px;font-weight:400;color:${COLORS.forest};letter-spacing:-0.01em;">
-                potentially.ai
+                potentially.mechlintech.com
               </p>
             </td>
           </tr>
@@ -241,6 +241,25 @@ export async function chatMessageEmail(input: {
     footerNoteOverride: input.onPlatform
       ? "Reply in Potentially to keep the conversation in one place."
       : undefined,
+  });
+}
+
+export async function introRequestEmail(input: {
+  recipientName: string | null;
+  requesterName: string;
+  message?: string | null;
+  ctaUrl: string;
+}): Promise<EmailPayload> {
+  const { renderPlatformEmail } = await import("@/lib/email/platform-templates");
+  return renderPlatformEmail("intro_request", {
+    vars: {
+      name: input.recipientName?.trim().split(/\s+/)[0] || "there",
+      requester_name: input.requesterName,
+      cta_url: input.ctaUrl,
+    },
+    ctaUrl: input.ctaUrl,
+    onPlatform: false,
+    quoteText: input.message?.trim() || null,
   });
 }
 

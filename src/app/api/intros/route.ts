@@ -5,7 +5,9 @@ import { featureDisabledResponse } from "@/lib/data/feature-flags";
 
 const introSchema = z.object({
   target_contact_id: z.string().min(1),
-  message: z.string().optional(),
+  connector_id: z.string().min(1).optional(),
+  message: z.string().max(2000).optional(),
+  delivery: z.enum(["mailto", "potentially"]).optional(),
 });
 
 export async function GET() {
@@ -27,8 +29,11 @@ export async function POST(request: Request) {
     if (disabled) return disabled;
 
     const body = await request.json();
-    const { target_contact_id, message } = introSchema.parse(body);
-    const intro = await createIntroduction(target_contact_id, message);
+    const { target_contact_id, connector_id, message, delivery } = introSchema.parse(body);
+    const intro = await createIntroduction(target_contact_id, message, undefined, {
+      connectorId: connector_id,
+      delivery,
+    });
     return NextResponse.json(intro);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -39,6 +44,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error("Failed to create introduction:", error);
     return NextResponse.json({ error: "Failed to create introduction" }, { status: 500 });
