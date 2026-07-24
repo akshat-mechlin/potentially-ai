@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Handshake, Clock, CheckCircle, XCircle, Loader2, Plus, Mail, Send } from "lucide-react";
+import {
+  Handshake,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Plus,
+  Mail,
+  Send,
+  Check,
+  ChevronDown,
+  Search,
+} from "lucide-react";
 import {
   MOBILE_BOTTOM_SHEET,
   MobileEmpty,
@@ -22,19 +34,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { FeatureDisabled } from "@/components/shared/feature-disabled";
 import { useOutreachEnabled } from "@/hooks/use-feature-flags";
 import { useWorkspaceStore } from "@/stores";
-import { getInitials, formatRelativeTime } from "@/lib/utils";
+import { cn, getInitials, formatRelativeTime } from "@/lib/utils";
 import type { Contact, Introduction, WorkspaceEmailSettings } from "@/types";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,6 +60,136 @@ function canSendViaPotentially(settings: WorkspaceEmailSettings | undefined) {
   if (!settings) return false;
   if (settings.mode === "platform") return true;
   return settings.senderDomainStatus === "verified";
+}
+
+function isNestedPickerTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest(
+      "[data-radix-popper-content-wrapper], [data-radix-popover-content], [role='listbox']",
+    ),
+  );
+}
+
+function ContactPicker({
+  contacts,
+  value,
+  onChange,
+  triggerClassName,
+}: {
+  contacts: Contact[];
+  value: string;
+  onChange: (contactId: string) => void;
+  triggerClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const selected = contacts.find((c) => c.id === value);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((c) => {
+      const name = c.full_name?.toLowerCase() ?? "";
+      const email = c.email?.toLowerCase() ?? "";
+      return name.includes(q) || email.includes(q);
+    });
+  }, [contacts, search]);
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setSearch("");
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "h-9 w-full justify-between px-3 font-normal shadow-sm",
+            !selected && "text-muted-foreground",
+            triggerClassName,
+          )}
+        >
+          {selected ? (
+            <span className="min-w-0 flex-1 truncate text-left">
+              <span className="text-foreground">{selected.full_name}</span>
+              {selected.email ? (
+                <span className="text-muted-foreground"> · {selected.email}</span>
+              ) : null}
+            </span>
+          ) : (
+            <span>Select contact</span>
+          )}
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          const content = event.currentTarget as HTMLElement | null;
+          content?.querySelector<HTMLInputElement>("input")?.focus();
+        }}
+      >
+        <div className="flex items-center gap-2 border-b border-border px-3">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search by name or email"
+            className="h-10 border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
+        </div>
+        <div role="listbox" className="max-h-60 overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+              No contacts found
+            </p>
+          ) : (
+            filtered.map((contact) => {
+              const isSelected = contact.id === value;
+              return (
+                <button
+                  key={contact.id}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  className={cn(
+                    "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                    isSelected && "bg-accent/60",
+                  )}
+                  onClick={() => {
+                    onChange(contact.id);
+                    handleOpenChange(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mt-0.5 h-4 w-4 shrink-0",
+                      isSelected ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{contact.full_name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {contact.email || "No email"}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export default function IntrosPage() {
@@ -206,8 +343,22 @@ export default function IntrosPage() {
   };
 
   const requestDialog = (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setContactId("");
+      }}
+    >
+      <DialogContent
+        className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}
+        onPointerDownOutside={(event) => {
+          if (isNestedPickerTarget(event.target)) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (isNestedPickerTarget(event.target)) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Request intro</DialogTitle>
           <DialogDescription>
@@ -215,18 +366,12 @@ export default function IntrosPage() {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
-          <Select value={contactId} onValueChange={setContactId}>
-            <SelectTrigger className={isMobileApp ? "rounded-xl" : undefined}>
-              <SelectValue placeholder="Select contact" />
-            </SelectTrigger>
-            <SelectContent>
-              {(contactsData?.contacts ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ContactPicker
+            contacts={contactsData?.contacts ?? []}
+            value={contactId}
+            onChange={setContactId}
+            triggerClassName={isMobileApp ? "rounded-xl" : undefined}
+          />
           <div className={`flex flex-col gap-2 ${isMobileApp ? "" : "sm:flex-row"}`}>
             <Button
               variant="outline"

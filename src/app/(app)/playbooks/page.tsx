@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MOBILE_BOTTOM_SHEET, MobileFab } from "@/components/mobile/primitives";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePlaybookEnabled } from "@/hooks/use-feature-flags";
 import { useMobileApp } from "@/hooks/use-mobile-app";
@@ -27,15 +28,28 @@ function CreatePlaybookDialog({
   open,
   onOpenChange,
   onCreated,
+  mobile,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (playbook: Playbook) => void;
+  mobile: boolean;
 }) {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const resetFields = () => {
+    setName("");
+    setGoal("");
+    setDescription("");
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) resetFields();
+    onOpenChange(next);
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -49,10 +63,7 @@ function CreatePlaybookDialog({
       if (!res.ok) throw new Error("Failed to create playbook");
       const playbook = (await res.json()) as Playbook;
       toast.success("Playbook created");
-      onOpenChange(false);
-      setName("");
-      setGoal("");
-      setDescription("");
+      handleOpenChange(false);
       onCreated(playbook);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create playbook");
@@ -61,27 +72,73 @@ function CreatePlaybookDialog({
     }
   };
 
+  const fields = (
+    <>
+      <div className="space-y-2">
+        <Label required>Name</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Book intro calls"
+          className={mobile ? "h-11 rounded-xl" : undefined}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Goal</Label>
+        <Input
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          placeholder="15-minute intro call"
+          className={mobile ? "h-11 rounded-xl" : undefined}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Description</Label>
+        <Textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What this playbook does"
+          className={mobile ? "min-h-20 rounded-xl" : undefined}
+        />
+      </div>
+    </>
+  );
+
+  const createLabel = saving ? "Creating..." : "Create";
+
+  if (mobile) {
+    return (
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className={`${MOBILE_BOTTOM_SHEET} gap-0`}>
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30" />
+          <DialogHeader className="border-b border-border px-5 py-4 text-left">
+            <DialogTitle className="text-base font-semibold">New playbook</DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">{fields}</div>
+          <div className="border-t border-border bg-card px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <Button
+              onClick={handleCreate}
+              disabled={saving || !name.trim()}
+              className="h-11 w-full rounded-xl text-sm font-semibold"
+            >
+              {createLabel}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mobile-more-sheet bottom-0 top-auto max-h-[90dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl border-b-0 sm:max-w-lg sm:bottom-auto sm:top-[50%] sm:translate-y-[-50%] sm:rounded-2xl sm:border">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-w-lg rounded-2xl">
         <DialogHeader>
           <DialogTitle>New playbook</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 pb-[env(safe-area-inset-bottom)] sm:pb-0">
-          <div className="space-y-2">
-            <Label required>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Book intro calls" />
-          </div>
-          <div className="space-y-2">
-            <Label>Goal</Label>
-            <Input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="15-minute intro call" />
-          </div>
-          <div className="space-y-2 desktop-only">
-            <Label>Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
+        <div className="space-y-4">
+          {fields}
           <Button onClick={handleCreate} disabled={saving || !name.trim()} className="w-full">
-            {saving ? "Creating..." : "Create"}
+            {createLabel}
           </Button>
         </div>
       </DialogContent>
@@ -130,10 +187,10 @@ export default function PlaybooksPage() {
   if (isMobileApp) {
     return (
       <>
-        <div className="mobile-menu-list">
+        <div className="mobile-menu-list pb-28">
           {data?.playbooks.map((playbook) => (
             <Link key={playbook.id} href={`/playbooks/${playbook.id}`} className="mobile-menu-item">
-              <span className="mobile-menu-item-icon-muted">
+              <span className="mobile-menu-item-icon mobile-menu-item-icon-muted">
                 <BookOpen className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1 truncate font-medium">{playbook.name}</span>
@@ -144,15 +201,26 @@ export default function PlaybooksPage() {
             </Link>
           ))}
           {!data?.playbooks.length && (
-            <div className="mobile-empty">No playbooks yet</div>
+            <div className="mobile-empty flex flex-col items-center gap-2">
+              <BookOpen className="h-7 w-7 text-muted-foreground/60" />
+              <p>No playbooks yet</p>
+              <p className="text-xs font-normal text-muted-foreground">
+                Tap the plus button to create one.
+              </p>
+            </div>
           )}
         </div>
 
-        <button type="button" className="mobile-fab" onClick={() => setOpen(true)} aria-label="New playbook">
+        <MobileFab onClick={() => setOpen(true)} label="New playbook">
           <Plus className="h-6 w-6" />
-        </button>
+        </MobileFab>
 
-        <CreatePlaybookDialog open={open} onOpenChange={setOpen} onCreated={onCreated} />
+        <CreatePlaybookDialog
+          open={open}
+          onOpenChange={setOpen}
+          onCreated={onCreated}
+          mobile
+        />
       </>
     );
   }
@@ -213,7 +281,12 @@ export default function PlaybooksPage() {
         )}
       </div>
 
-      <CreatePlaybookDialog open={open} onOpenChange={setOpen} onCreated={onCreated} />
+      <CreatePlaybookDialog
+        open={open}
+        onOpenChange={setOpen}
+        onCreated={onCreated}
+        mobile={false}
+      />
     </div>
   );
 }
