@@ -78,7 +78,7 @@ async function withFreshAccessToken(
     }
 
     const def = getConnectorDefinition(account.connector_key);
-    const provider = def?.oauth?.supabaseProvider;
+    const provider = def?.oauth?.provider;
 
     const refreshed =
       provider === "azure"
