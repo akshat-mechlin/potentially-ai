@@ -13,6 +13,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["contacts"],
     availability: "live",
     oauth: {
+      provider: "google",
       supabaseProvider: "google",
       scopes:
         "https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/userinfo.email",
@@ -30,6 +31,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["calendar"],
     availability: "live",
     oauth: {
+      provider: "google",
       supabaseProvider: "google",
       scopes:
         "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/userinfo.email",
@@ -47,6 +49,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["email", "contacts"],
     availability: "live",
     oauth: {
+      provider: "google",
       supabaseProvider: "google",
       scopes:
         "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/userinfo.email",
@@ -64,6 +67,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["files"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "google",
       scopes: "https://www.googleapis.com/auth/drive.readonly",
     },
@@ -79,6 +83,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["contacts"],
     availability: "live",
     oauth: {
+      provider: "azure",
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access User.Read Contacts.Read",
     },
@@ -95,6 +100,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["email", "contacts"],
     availability: "live",
     oauth: {
+      provider: "azure",
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access User.Read Mail.Read",
     },
@@ -111,6 +117,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["calendar"],
     availability: "coming_soon",
     oauth: {
+      provider: "azure",
       supabaseProvider: "azure",
       scopes: "openid profile email offline_access User.Read Calendars.Read",
     },
@@ -126,6 +133,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["social", "contacts"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "linkedin_oidc",
       scopes: "openid profile email",
     },
@@ -141,6 +149,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["social"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "facebook",
       scopes: "email public_profile",
     },
@@ -156,6 +165,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["social"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "facebook",
       scopes: "instagram_basic",
     },
@@ -171,6 +181,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["social"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "twitter",
       scopes: "users.read tweet.read offline.access",
     },
@@ -186,6 +197,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["contacts", "social"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "github",
       scopes: "read:user user:email",
     },
@@ -201,6 +213,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     capabilities: ["contacts"],
     availability: "coming_soon",
     oauth: {
+      provider: "google",
       supabaseProvider: "apple",
       scopes: "name email",
     },
@@ -226,6 +239,24 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     brandInitial: "W",
     capabilities: ["messages"],
     availability: "coming_soon",
+  },
+  {
+    key: "apollo",
+    name: "Apollo",
+    description:
+      "Search and enrich people and companies using your Apollo account and credits.",
+    category: "sales_intelligence",
+    categoryLabel: "Sales Intelligence",
+    brandColor: "#EBF212",
+    brandInitial: "A",
+    capabilities: ["contacts", "search"],
+    availability: "beta",
+    oauth: {
+      provider: "apollo",
+      // Must match scopes registered in Apollo OAuth settings exactly.
+      scopes:
+        "read_user_profile organizations_search organization_read person_read contacts_search contact_read accounts_search account_read organizations_enrich mixed_people_api_search mixed_companies_search",
+    },
   },
   {
     key: "custom_data",
