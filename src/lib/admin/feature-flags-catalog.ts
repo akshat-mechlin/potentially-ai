@@ -26,6 +26,11 @@ export const FEATURE_FLAG_CATALOG: Record<string, FeatureFlagDefinition> = {
     label: "Team Collaboration",
     description: "Groups, invites, and member roles",
   },
+  connector_apollo: {
+    key: "connector_apollo",
+    label: "Apollo Connector",
+    description: "Connect Apollo accounts for search and enrichment",
+  },
   beta_connectors: {
     key: "beta_connectors",
     label: "Beta Connectors",
@@ -82,6 +87,7 @@ export const CONNECTOR_FEATURE_FLAG_KEYS = [
   "google_sync",
   "outlook_sync",
   "csv_import",
+  "connector_apollo",
   "beta_connectors",
 ] as const satisfies readonly FeatureFlagKey[];
 

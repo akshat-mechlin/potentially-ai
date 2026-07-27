@@ -303,6 +303,7 @@ export async function saveConnectorOAuthTokens(
         auto_sync_enabled: Boolean(siblingAutoSync?.auto_sync_enabled),
         metadata: {
           connected_via: "oauth",
+          oauth_provider: def.oauth.provider,
           supabase_provider: def.oauth.supabaseProvider,
           ...params.metadata,
         },
