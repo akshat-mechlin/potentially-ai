@@ -73,6 +73,15 @@ export function ConnectorSetupBanner() {
 
           <div className="space-y-1 text-xs text-muted-foreground">
             <p>
+              <strong className="font-medium text-foreground">Apollo OAuth:</strong> register
+              Potentially in Apollo under Settings → Integrations → API Keys → OAuth registration.
+              Add the connector callback URL below and set{" "}
+              <code className="rounded bg-muted px-1">APOLLO_OAUTH_CLIENT_ID</code> /{" "}
+              <code className="rounded bg-muted px-1">APOLLO_OAUTH_CLIENT_SECRET</code> in{" "}
+              <code className="rounded bg-muted px-1">.env</code>. Users need permission to
+              authorize third-party OAuth apps in Apollo.
+            </p>
+            <p>
               <strong className="font-medium text-foreground">Google Cloud:</strong> enable People,
               Calendar, and Gmail APIs; add those scopes on the consent screen.
             </p>

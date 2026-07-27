@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Building2, Mail, UserPlus, Users, Loader2, Send } from "lucide-react";
+import { ArrowRight, Building2, Mail, UserPlus, Users, Loader2, Send, Sparkles, Network } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { SearchResultContact, WorkspaceEmailSettings } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
@@ -33,7 +34,7 @@ interface SearchResultCardProps {
   index: number;
   selectable?: boolean;
   selected?: boolean;
-  onToggle?: (contactId: string) => void;
+  onToggle?: () => void;
 }
 
 export function SearchResultCard({
@@ -58,6 +59,9 @@ export function SearchResultCard({
     },
   });
   const potentiallySendReady = canSendViaPotentially(emailSettings);
+  const isPlatform = contact.source === "platform";
+  const canViewProfile = !isPlatform || contact.in_contacts;
+  const profileHref = canViewProfile ? contactHref(contact.id) : undefined;
 
   const handleRequestIntro = async (delivery: "mailto" | "potentially") => {
     setRequestingIntro(delivery);
@@ -112,14 +116,14 @@ export function SearchResultCard({
               : "cursor-pointer hover:border-primary/30 hover:shadow-md"
             : "hover:border-primary/20 hover:shadow-md",
         )}
-        onClick={selectable ? () => onToggle?.(contact.id) : undefined}
+        onClick={selectable ? () => onToggle?.() : undefined}
       >
         <CardContent className="flex items-start gap-4 p-4">
           {selectable && (
             <input
               type="checkbox"
               checked={selected}
-              onChange={() => onToggle?.(contact.id)}
+              onChange={() => onToggle?.()}
               onClick={(e) => e.stopPropagation()}
               className="mt-3 h-4 w-4 shrink-0 rounded border-border"
               aria-label={`Select ${contact.full_name || "contact"}`}
@@ -132,13 +136,17 @@ export function SearchResultCard({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <Link
-                  href={contactHref(contact.id)}
-                  className="font-medium hover:underline"
-                  onClick={(e) => selectable && e.stopPropagation()}
-                >
-                  {contact.full_name || contact.email || "Unknown contact"}
-                </Link>
+                {profileHref ? (
+                  <Link
+                    href={profileHref}
+                    className="font-medium hover:underline"
+                    onClick={(e) => selectable && e.stopPropagation()}
+                  >
+                    {contact.full_name || contact.email || "Unknown contact"}
+                  </Link>
+                ) : (
+                  <p className="font-medium">{contact.full_name || "Unknown prospect"}</p>
+                )}
                 <p className="text-sm text-muted-foreground">
                   {contact.title}
                   {contact.company_name && (
@@ -149,19 +157,56 @@ export function SearchResultCard({
                     </span>
                   )}
                 </p>
-                {contact.network_owner_name && (
+                {isPlatform && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {contact.enrichment_status === "enriched" ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        Enriched
+                      </Badge>
+                    ) : null}
+                    {contact.in_contacts ? (
+                      <Badge variant="outline" className="text-[10px]">
+                        In contacts
+                      </Badge>
+                    ) : null}
+                  </div>
+                )}
+                {!isPlatform && contact.network_owner_name && (
                   <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <Users className="h-3 w-3" />
                     In {contact.network_owner_name}&apos;s network
                     {contact.group_name ? ` · ${contact.group_name}` : ""}
                   </p>
                 )}
-                {!contact.network_owner_name && contact.group_name && (
+                {!isPlatform && !contact.network_owner_name && contact.group_name && (
                   <p className="mt-1 text-xs text-muted-foreground">{contact.group_name}</p>
                 )}
               </div>
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                {contact.score}
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[10px]",
+                    isPlatform
+                      ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+                  )}
+                >
+                  {isPlatform ? (
+                    <>
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      Apollo
+                    </>
+                  ) : (
+                    <>
+                      <Network className="mr-1 h-3 w-3" />
+                      Your Network
+                    </>
+                  )}
+                </Badge>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                  {contact.score}
+                </div>
               </div>
             </div>
 
@@ -179,7 +224,7 @@ export function SearchResultCard({
               </div>
             )}
 
-            {!selectable && (
+            {!selectable && !isPlatform && (
               <div className="flex items-center gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={contactHref(contact.id)}>
@@ -203,6 +248,17 @@ export function SearchResultCard({
                 >
                   <UserPlus className="mr-1 h-3 w-3" />
                   Request intro
+                </Button>
+              </div>
+            )}
+
+            {!selectable && isPlatform && contact.in_contacts && (
+              <div className="flex items-center gap-2 pt-2" onClick={(e) => e.stopPropagation()}>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={contactHref(contact.id)}>
+                    View contact
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Link>
                 </Button>
               </div>
             )}
