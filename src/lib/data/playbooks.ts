@@ -1386,3 +1386,32 @@ export async function getProspectThreadContext(runContactId: string) {
     viewer_role: "sender" as const,
   };
 }
+
+export async function importApolloProspectsIntoRun(
+  runId: string,
+  people: import("@/lib/integrations/apollo/types").ApolloPerson[],
+) {
+  if (isDataDemoMode()) {
+    return { saved: people.length, records: [] as string[] };
+  }
+
+  const run = await getPlaybookRun(runId);
+  if (!run) throw new Error("Run not found");
+
+  const { saveApolloProspectsForPlaybookRun } = await import("@/lib/data/platform-prospects");
+  const result = await saveApolloProspectsForPlaybookRun(people);
+  if (!result.saved) throw new Error("No importable Apollo prospects selected.");
+
+  await logAuditEvent("playbook.apollo_save", "playbook_run", runId, {
+    saved: result.saved,
+    record_ids: result.prospects.map((prospect) => prospect.id),
+  });
+
+  return {
+    saved: result.saved,
+    records: result.prospects,
+    matched: 0,
+    skipped: 0,
+    contact_ids: [] as string[],
+  };
+}

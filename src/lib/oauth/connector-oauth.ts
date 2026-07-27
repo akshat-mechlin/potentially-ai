@@ -36,8 +36,12 @@ export function getConnectorOAuthCallbackAllowlistUrls() {
 }
 
 export function supportsDirectConnectorOAuth(connectorKey: ConnectorKey) {
-  const provider = getConnectorDefinition(connectorKey)?.oauth?.supabaseProvider;
-  return provider === "google" || provider === "azure";
+  const provider = getConnectorDefinition(connectorKey)?.oauth?.provider;
+  return provider === "google" || provider === "azure" || provider === "apollo";
+}
+
+export function getConnectorOAuthProvider(connectorKey: ConnectorKey) {
+  return getConnectorDefinition(connectorKey)?.oauth?.provider ?? null;
 }
 
 export function createConnectorOAuthState(
