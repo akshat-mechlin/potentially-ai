@@ -159,6 +159,19 @@ export interface PlaybookProspect {
   };
 }
 
+export interface ThreadMessageAttachment {
+  id: string;
+  thread_id: string;
+  message_id: string;
+  uploaded_by: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  storage_path: string;
+  created_at: string;
+  url?: string | null;
+}
+
 export interface ThreadMessage {
   id: string;
   thread_id: string;
@@ -167,6 +180,7 @@ export interface ThreadMessage {
   message_type: string;
   metadata: Record<string, unknown>;
   created_at: string;
+  attachments?: ThreadMessageAttachment[];
 }
 
 export interface AuditLogEntry {

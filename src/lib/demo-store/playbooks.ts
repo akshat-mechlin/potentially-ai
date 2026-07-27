@@ -46,7 +46,27 @@ let runs: PlaybookRun[] = [];
 let prospects: PlaybookProspect[] = [];
 const threadMessages: Record<
   string,
-  Array<{ id: string; body: string; message_type: string; created_at: string }>
+  Array<{
+    id: string;
+    thread_id: string;
+    sender_user_id: string | null;
+    body: string;
+    message_type: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+    attachments?: Array<{
+      id: string;
+      thread_id: string;
+      message_id: string;
+      uploaded_by: string;
+      file_name: string;
+      file_size: number;
+      mime_type: string;
+      storage_path: string;
+      created_at: string;
+      url?: string | null;
+    }>;
+  }>
 > = {};
 
 function withoutContactIds<T extends { contact_ids: string[] }>(
@@ -259,16 +279,39 @@ export function getDemoThreadMessages(runContactId: string) {
 
 export function addDemoThreadMessage(
   runContactId: string,
-  message: { body: string; message_type: string },
+  message: {
+    body: string;
+    message_type: string;
+    attachments?: Array<{
+      id: string;
+      thread_id: string;
+      message_id: string;
+      uploaded_by: string;
+      file_name: string;
+      file_size: number;
+      mime_type: string;
+      storage_path: string;
+      created_at: string;
+      url?: string | null;
+    }>;
+  },
 ) {
   const list = threadMessages[runContactId] ?? [];
+  const messageId = `msg-${Date.now()}`;
   threadMessages[runContactId] = [
     ...list,
     {
-      id: `msg-${Date.now()}`,
+      id: messageId,
+      thread_id: "demo-thread",
+      sender_user_id: null,
       body: message.body,
       message_type: message.message_type,
+      metadata: {},
       created_at: new Date().toISOString(),
+      attachments: message.attachments?.map((attachment) => ({
+        ...attachment,
+        message_id: messageId,
+      })),
     },
   ];
 }

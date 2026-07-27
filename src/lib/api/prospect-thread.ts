@@ -33,7 +33,7 @@ export async function loadProspectThread(runContactId: string) {
   return NextResponse.json(await buildThreadPayload(runContactId));
 }
 
-const postSchema = z.object({ body: z.string().min(1) });
+const postSchema = z.object({ body: z.string().max(10000).default("") });
 
 export async function sendProspectThreadMessage(runContactId: string, request: Request) {
   const chat_enabled = await isFeatureEnabled("platform_chat");
@@ -41,8 +41,27 @@ export async function sendProspectThreadMessage(runContactId: string, request: R
     return NextResponse.json({ error: "Platform chat is disabled" }, { status: 403 });
   }
 
-  const { body } = postSchema.parse(await request.json());
-  await postThreadMessage(runContactId, body);
+  const contentType = request.headers.get("content-type") || "";
+  let body = "";
+  let files: File[] = [];
+
+  if (contentType.includes("multipart/form-data")) {
+    const { collectFormFiles } = await import("@/lib/chat/attachments");
+    const form = await request.formData();
+    body = String(form.get("body") ?? "");
+    files = collectFormFiles(form);
+  } else {
+    body = postSchema.parse(await request.json()).body;
+  }
+
+  if (!body.trim() && files.length === 0) {
+    return NextResponse.json(
+      { error: "Write a message or attach a file." },
+      { status: 400 },
+    );
+  }
+
+  await postThreadMessage(runContactId, body, files);
   return NextResponse.json(await buildThreadPayload(runContactId));
 }
 
@@ -55,6 +74,9 @@ export function prospectThreadErrorResponse(error: unknown, action: "load" | "se
   }
   if (error instanceof Error && error.message === "Prospect not found") {
     return NextResponse.json({ error: error.message }, { status: 404 });
+  }
+  if (action === "send" && error instanceof Error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
   console.error(`Failed to ${action} prospect thread:`, error);
   return NextResponse.json(

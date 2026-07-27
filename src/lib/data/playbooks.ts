@@ -650,26 +650,58 @@ export async function updateProspectDraft(
   await logAuditEvent("playbook.draft_edited", "playbook_run_contact", prospectId, updates);
 }
 
-export async function postThreadMessage(runContactId: string, body: string) {
+export async function postThreadMessage(runContactId: string, body: string, files: File[] = []) {
+  const { chatMessageBodyOrAttachmentFallback } = await import("@/lib/chat/attachments");
+  const messageBody = chatMessageBodyOrAttachmentFallback(body, files);
+
   if (isDataDemoMode()) {
     const { addDemoThreadMessage } = await import("@/lib/demo-store/playbooks");
-    addDemoThreadMessage(runContactId, { body, message_type: "text" });
+    addDemoThreadMessage(runContactId, {
+      body: messageBody,
+      message_type: "text",
+      attachments: files.map((file, index) => ({
+        id: `demo-attach-${Date.now()}-${index}`,
+        thread_id: "demo-thread",
+        message_id: `msg-${Date.now()}`,
+        uploaded_by: "demo-user",
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type || "application/octet-stream",
+        storage_path: "",
+        created_at: new Date().toISOString(),
+        url: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+      })),
+    });
     return;
   }
 
   const { supabase, user, workspaceId } = await getUserWorkspaceContext();
   if (!supabase || !user || !workspaceId) throw new Error("Unauthorized");
 
+  const { uploadThreadMessageAttachments } = await import("@/lib/data/thread-attachments");
   const existingThread = await getThreadForRunContact(supabase, runContactId, user.id);
 
   if (existingThread?.recipient_user_id === user.id) {
-    await supabase.from("thread_messages").insert({
-      thread_id: existingThread.id,
-      sender_user_id: user.id,
-      body,
-      message_type: "platform_inbound",
-      metadata: {},
+    const { data: message, error } = await supabase
+      .from("thread_messages")
+      .insert({
+        thread_id: existingThread.id,
+        sender_user_id: user.id,
+        body: messageBody,
+        message_type: "platform_inbound",
+        metadata: {},
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    await uploadThreadMessageAttachments(supabase, {
+      threadId: existingThread.id,
+      messageId: message.id,
+      userId: user.id,
+      files,
     });
+
     await supabase
       .from("conversation_threads")
       .update({ last_message_at: new Date().toISOString() })
@@ -730,13 +762,26 @@ export async function postThreadMessage(runContactId: string, body: string) {
   const messageType =
     delivery.mode === "platform" ? "platform_outbound" : "outbound_chat_email";
 
-  await supabase.from("thread_messages").insert({
-    thread_id: thread.id,
-    sender_user_id: user.id,
-    body,
-    message_type: messageType,
-    metadata: { delivery_mode: delivery.mode },
+  const { data: message, error: messageError } = await supabase
+    .from("thread_messages")
+    .insert({
+      thread_id: thread.id,
+      sender_user_id: user.id,
+      body: messageBody,
+      message_type: messageType,
+      metadata: { delivery_mode: delivery.mode },
+    })
+    .select("id")
+    .single();
+  if (messageError) throw messageError;
+
+  await uploadThreadMessageAttachments(supabase, {
+    threadId: thread.id,
+    messageId: message.id,
+    userId: user.id,
+    files,
   });
+
   await supabase
     .from("conversation_threads")
     .update({ last_message_at: new Date().toISOString() })
@@ -750,7 +795,7 @@ export async function postThreadMessage(runContactId: string, body: string) {
       senderEmail: (profile?.email as string | null) ?? user.email ?? null,
       senderWorkspaceName: (workspace?.name as string | null) ?? null,
       workspaceId,
-      body,
+      body: messageBody,
       runContactId,
     });
   }
