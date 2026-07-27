@@ -34,7 +34,7 @@ export async function connectConnector(connectorKey: ConnectorKey) {
 
   if (!supportsDirectConnectorOAuth(connectorKey)) {
     throw new Error(
-      `${def.name} connection via this provider is not supported yet. Use Google or Microsoft connectors.`,
+      `${def.name} connection via this provider is not supported yet.`,
     );
   }
 
