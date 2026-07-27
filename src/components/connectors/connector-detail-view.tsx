@@ -56,6 +56,7 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
   const connector = data?.connectors.find((item) => item.key === connectorKey) ?? null;
   const key = connector?.key as ConnectorKey | undefined;
   const isCustom = key === "custom_data";
+  const isApollo = key === "apollo";
   const def = key ? getConnectorDefinition(key) : null;
   const syncSource = def?.syncSource;
   const selectedAccount =
@@ -150,7 +151,9 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
   const backLabel = selectedAccount ? `Back to ${connector.name}` : "Back to connectors";
   const title = selectedAccount ? selectedAccount.label : connector.name;
   const subtitle = selectedAccount
-    ? `${selectedAccount.recordsCount.toLocaleString()} records · synced ${selectedAccount.lastSync}`
+    ? isApollo
+      ? `Connected Apollo account · ${selectedAccount.lastSync}`
+      : `${selectedAccount.recordsCount.toLocaleString()} records · synced ${selectedAccount.lastSync}`
     : connector.description;
 
   return (
@@ -208,7 +211,7 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
               </Button>
             ) : null}
 
-            {connector.connected && connector.canSync && !selectedAccount && (
+            {connector.connected && connector.canSync && !isApollo && !selectedAccount && (
               <Button
                 size="sm"
                 variant="outline"
@@ -228,7 +231,7 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
 
             {selectedAccount && (
               <>
-                {connector.canSync && !isCustom && (
+                {connector.canSync && !isCustom && !isApollo && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -279,12 +282,15 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
             <CardContent className="py-16 text-center text-sm text-muted-foreground">
               {connector.availability === "coming_soon"
                 ? "This connector is coming soon."
-                : "No accounts connected yet. Use Connect to get started."}
+                : isApollo
+                  ? "No Apollo account connected yet. Use Connect to authorize Potentially with Apollo."
+                  : "No accounts connected yet. Use Connect to get started."}
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {connector.accounts.map((account) => {
+          <>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {connector.accounts.map((account) => {
               const busy = busyAccountId === account.id || busyAccountId === "all";
               return (
                 <Card
@@ -299,14 +305,16 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{account.label}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {account.recordsCount.toLocaleString()} records · {account.lastSync}
+                          {isApollo
+                            ? `Connected · ${account.lastSync}`
+                            : `${account.recordsCount.toLocaleString()} records · ${account.lastSync}`}
                         </p>
                       </div>
                       <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     </Link>
                     <div className="flex shrink-0 items-center gap-0.5 border-l border-border/60 px-2">
-                      {connector.canSync && !isCustom && (
+                      {connector.canSync && !isCustom && !isApollo && (
                         <Button
                           type="button"
                           size="icon"
@@ -343,8 +351,36 @@ export function ConnectorDetailView({ connectorKey, accountId }: ConnectorDetail
                 </Card>
               );
             })}
-          </div>
+            </div>
+            {isApollo ? (
+              <Card>
+                <CardContent className="space-y-3 py-6">
+                  <p className="text-sm font-medium">Apollo search</p>
+                  <p className="text-sm text-muted-foreground">
+                    Search and enrich prospects from the main Search page. Results are saved
+                    automatically and can be added to your workspace contacts.
+                  </p>
+                  <Button asChild size="sm">
+                    <Link href="/search">Open Search</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+          </>
         )
+      ) : isApollo ? (
+        <Card>
+          <CardContent className="space-y-3 py-6">
+            <p className="text-sm font-medium">Apollo search</p>
+            <p className="text-sm text-muted-foreground">
+              Connect your Apollo account above, then search and enrich prospects from the Search
+              page.
+            </p>
+            <Button asChild size="sm">
+              <Link href="/search">Open Search</Link>
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <ConnectorRecordsPanel
           connectorKey={key}

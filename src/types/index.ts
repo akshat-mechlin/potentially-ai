@@ -9,7 +9,8 @@ export type SyncSource =
   | "gmail"
   | "outlook"
   | "outlook_mail"
-  | "csv";
+  | "csv"
+  | "apollo";
 export type RelationshipEventType =
   | "email"
   | "meeting"
@@ -157,10 +158,15 @@ export interface Introduction {
   requester_name?: string | null;
 }
 
-export interface SearchResult {
-  contacts: SearchResultContact[];
-  summary: string;
-  suggested_actions: string[];
+export interface SearchSourceStatus {
+  success: boolean;
+  count: number;
+  error?: string;
+}
+
+export interface SearchSources {
+  apollo: SearchSourceStatus;
+  workspace: SearchSourceStatus;
 }
 
 export interface SearchResultContact {
@@ -175,6 +181,21 @@ export interface SearchResultContact {
   recommended_action: string;
   network_owner_name?: string | null;
   group_name?: string | null;
+  source?: "workspace" | "platform";
+  platform_prospect_id?: string;
+  apollo_id?: string;
+  enrichment_status?: string;
+  in_contacts?: boolean;
+  raw_apollo?: Record<string, unknown>;
+}
+
+export interface SearchResult {
+  contacts: SearchResultContact[];
+  summary: string;
+  suggested_actions: string[];
+  source?: "workspace" | "apollo" | "merged";
+  sources?: SearchSources;
+  apollo_query?: string;
 }
 
 export interface OAuthConnection {

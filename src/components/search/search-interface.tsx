@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Search, Sparkles, ArrowRight, Loader2, Users } from "lucide-react";
 import { useSearchStore } from "@/stores";
@@ -9,15 +9,33 @@ import { useWorkspaces } from "@/hooks/use-workspaces";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { MobileChip, MobileChipRow, MobileLargeTitle, MobileSearchBar } from "@/components/mobile/native-ui";
 import { SegmentSaveBar } from "@/components/segments/segment-save-bar";
+import { SearchApolloStrip } from "@/components/search/search-apollo-strip";
+import { SearchPlatformActionsBar } from "@/components/search/search-platform-actions-bar";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { SearchResultCard } from "./search-result-card";
+import type { SearchResultContact, SearchSources } from "@/types";
 
 interface SearchInterfaceProps {
   initialQuery?: string;
   initialGroupId?: string;
+}
+
+function contactSelectionKey(contact: SearchResultContact) {
+  return contact.platform_prospect_id ?? contact.id;
+}
+
+function segmentEligibleContactIds(contacts: SearchResultContact[], selectedKeys: string[]) {
+  const selected = new Set(selectedKeys);
+  return contacts
+    .filter((contact) => {
+      const key = contactSelectionKey(contact);
+      if (!selected.has(key)) return false;
+      return contact.source !== "platform" || contact.in_contacts;
+    })
+    .map((contact) => (contact.in_contacts ? contact.id : contact.id));
 }
 
 export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInterfaceProps) {
@@ -27,7 +45,8 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
   const { isMobileApp } = useMobileApp();
   const [localQuery, setLocalQuery] = useState(query || initialQuery);
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [searchSources, setSearchSources] = useState<SearchSources | null>(null);
   const initialSearchRan = useRef(false);
 
   const filteredGroup = initialGroupId
@@ -36,72 +55,99 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
 
   const resultContacts = results?.contacts ?? [];
   const allSelected =
-    resultContacts.length > 0 && resultContacts.every((c) => selectedIds.includes(c.id));
+    resultContacts.length > 0 &&
+    resultContacts.every((contact) => selectedKeys.includes(contactSelectionKey(contact)));
 
-  const toggleContact = (contactId: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(contactId) ? prev.filter((id) => id !== contactId) : [...prev, contactId],
+  const selectedContacts = resultContacts.filter((contact) =>
+    selectedKeys.includes(contactSelectionKey(contact)),
+  );
+  const segmentContactIds = segmentEligibleContactIds(resultContacts, selectedKeys);
+
+  const toggleContact = (contact: SearchResultContact) => {
+    const key = contactSelectionKey(contact);
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((id) => id !== key) : [...prev, key],
     );
   };
 
   const toggleSelectAll = () => {
     if (allSelected) {
-      setSelectedIds([]);
+      setSelectedKeys([]);
       return;
     }
-    setSelectedIds(resultContacts.map((c) => c.id));
+    setSelectedKeys(resultContacts.map((contact) => contactSelectionKey(contact)));
   };
 
-  const handleSearch = async (searchQuery?: string) => {
-    const q = searchQuery || localQuery;
-    if (!q.trim()) return;
+  const handleSearch = useCallback(
+    async (searchQuery?: string) => {
+      const q = searchQuery || localQuery;
+      if (!q.trim()) return;
 
-    setQuery(q);
-    setIsSearching(true);
-    addToHistory(q);
-    setSelectMode(false);
-    setSelectedIds([]);
+      setQuery(q);
+      setIsSearching(true);
+      addToHistory(q);
+      setSelectMode(false);
+      setSelectedKeys([]);
 
-    try {
-      const res = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: q,
-          ...(initialGroupId ? { workspace_id: initialGroupId } : {}),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Search failed");
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: q,
+            ...(initialGroupId ? { workspace_id: initialGroupId } : {}),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Search failed");
+        }
+        setSearchSources(data.sources ?? null);
+        setResults({
+          contacts: data.contacts ?? [],
+          summary: data.summary ?? "No summary available.",
+          suggested_actions: data.suggested_actions ?? [],
+          source: data.source,
+          sources: data.sources,
+          apollo_query: data.apollo_query,
+        });
+      } catch (error) {
+        setResults(null);
+        setSearchSources(null);
+        toast.error(error instanceof Error ? error.message : "Search failed");
+      } finally {
+        setIsSearching(false);
       }
-      setResults({
-        contacts: data.contacts ?? [],
-        summary: data.summary ?? "No summary available.",
-        suggested_actions: data.suggested_actions ?? [],
-      });
-    } catch (error) {
-      setResults(null);
-      toast.error(error instanceof Error ? error.message : "Search failed");
-    } finally {
-      setIsSearching(false);
-    }
-  };
+    },
+    [addToHistory, initialGroupId, localQuery, setIsSearching, setQuery, setResults],
+  );
 
   useEffect(() => {
     if (!initialQuery || initialSearchRan.current) return;
     initialSearchRan.current = true;
     void handleSearch(initialQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once for URL-provided query
-  }, [initialQuery]);
+  }, [handleSearch, initialQuery]);
 
   const groupCount = workspaces.length;
+  const apolloFailedWithError =
+    searchSources?.apollo.success === false && Boolean(searchSources.apollo.error);
+  const hasApolloResults = (searchSources?.apollo.count ?? 0) > 0;
+  const hasWorkspaceResults = (searchSources?.workspace.count ?? 0) > 0;
 
   return (
     <div className={isMobileApp ? "space-y-4 pb-24" : "mx-auto max-w-3xl space-y-8 pb-24"}>
       {isMobileApp && (
-        <MobileLargeTitle title="Search" subtitle="Ask anything about your network" />
+        <MobileLargeTitle
+          title="Search"
+          subtitle={
+            hasApolloResults || hasWorkspaceResults
+              ? "Results from Apollo and your network"
+              : "Ask anything about your network"
+          }
+        />
       )}
+
+      <SearchApolloStrip />
 
       {!isMobileApp && groupCount > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -109,20 +155,29 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
           <span>
             {filteredGroup ? (
               <>
-                Searching in{" "}
-                <strong className="font-medium text-foreground">{filteredGroup.name}</strong> only
+                Searching Apollo and{" "}
+                <strong className="font-medium text-foreground">{filteredGroup.name}</strong>
               </>
             ) : (
               <>
-                Searching across{" "}
+                Searching Apollo and your contacts across{" "}
                 <strong className="font-medium text-foreground">
                   {groupCount} {groupCount === 1 ? "group" : "groups"}
                 </strong>
-                : your connections plus every teammate&apos;s synced contacts
               </>
             )}
           </span>
         </div>
+      )}
+
+      {!isMobileApp && apolloFailedWithError && (
+        <p className="text-sm text-muted-foreground">
+          Apollo search is unavailable right now. Showing your network results when available.
+        </p>
+      )}
+
+      {!isMobileApp && results?.apollo_query && (
+        <p className="text-xs text-muted-foreground">Apollo query: {results.apollo_query}</p>
       )}
 
       <div className="space-y-3">
@@ -231,8 +286,11 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
                 {resultContacts.length} result{resultContacts.length === 1 ? "" : "s"}
-                {selectMode && selectedIds.length > 0
-                  ? ` · ${selectedIds.length} selected`
+                {searchSources
+                  ? ` · ${searchSources.workspace.count} from your network · ${searchSources.apollo.count} from Apollo`
+                  : ""}
+                {selectMode && selectedKeys.length > 0
+                  ? ` · ${selectedKeys.length} selected`
                   : ""}
               </p>
               <div className="flex flex-wrap gap-2">
@@ -246,7 +304,7 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
                   size="sm"
                   onClick={() => {
                     setSelectMode((v) => !v);
-                    setSelectedIds([]);
+                    setSelectedKeys([]);
                   }}
                 >
                   {selectMode
@@ -255,7 +313,7 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
                       : "Done selecting"
                     : isMobileApp
                       ? "Select"
-                      : "Select for segment"}
+                      : "Select results"}
                 </Button>
               </div>
             </div>
@@ -264,19 +322,24 @@ export function SearchInterface({ initialQuery = "", initialGroupId }: SearchInt
           <div className="space-y-3">
             {resultContacts.map((contact, i) => (
               <SearchResultCard
-                key={contact.id}
+                key={contactSelectionKey(contact)}
                 contact={contact}
                 index={i}
                 selectable={selectMode}
-                selected={selectedIds.includes(contact.id)}
-                onToggle={toggleContact}
+                selected={selectedKeys.includes(contactSelectionKey(contact))}
+                onToggle={() => toggleContact(contact)}
               />
             ))}
           </div>
         </motion.div>
       )}
 
-      <SegmentSaveBar selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
+      <SearchPlatformActionsBar
+        selectedContacts={selectedContacts}
+        onClear={() => setSelectedKeys([])}
+        onRefresh={() => void handleSearch()}
+      />
+      <SegmentSaveBar selectedIds={segmentContactIds} onClear={() => setSelectedKeys([])} />
     </div>
   );
 }
