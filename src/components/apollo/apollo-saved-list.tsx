@@ -27,13 +27,17 @@ export function ApolloSavedList() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setSelectedIds(new Set());
+    }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => {
+  const changeTab = (value: SavedTab) => {
+    setTab(value);
     setSelectedIds(new Set());
-  }, [tab, debouncedSearch]);
+  };
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useApolloRecordsList({
     q: debouncedSearch,
@@ -161,7 +165,7 @@ export function ApolloSavedList() {
         <span className="text-xs text-muted-foreground">{total} saved</span>
       </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as SavedTab)}>
+      <Tabs value={tab} onValueChange={(value) => changeTab(value as SavedTab)}>
         <TabsList>
           <TabsTrigger value="people">People</TabsTrigger>
           <TabsTrigger value="organizations">Organizations</TabsTrigger>

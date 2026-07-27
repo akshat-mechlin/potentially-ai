@@ -3,7 +3,6 @@
 import { Suspense, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Building2, Mail, ExternalLink, Sparkles, Send, Loader2 } from "lucide-react";
 import type { Contact, OutreachResult, WorkspaceEmailSettings } from "@/types";
@@ -80,7 +79,6 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const { enabled: outreachEnabled } = useOutreachEnabled();
   const workspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
   const queryClient = useQueryClient();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ContactTab>(
     defaultTab === "outreach" && !outreachEnabled ? "overview" : defaultTab,
   );

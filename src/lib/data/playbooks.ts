@@ -1387,33 +1387,6 @@ export async function getProspectThreadContext(runContactId: string) {
   };
 }
 
-async function resolveImportedContactIds(
-  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
-  workspaceId: string,
-  externalIds: string[],
-  emails: string[],
-) {
-  const ids = new Set<string>();
-  if (externalIds.length) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .in("external_id", externalIds);
-    for (const row of data ?? []) ids.add(row.id as string);
-  }
-  const normalizedEmails = [...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
-  if (normalizedEmails.length) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .in("email", normalizedEmails);
-    for (const row of data ?? []) ids.add(row.id as string);
-  }
-  return [...ids];
-}
-
 export async function importApolloProspectsIntoRun(
   runId: string,
   people: import("@/lib/integrations/apollo/types").ApolloPerson[],

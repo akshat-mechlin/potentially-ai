@@ -41,7 +41,7 @@ export async function upsertApolloRecordsFromSearch(
   return { saved: result.saved, records: result.prospects };
 }
 
-export async function listApolloRecords(_options?: {
+export async function listApolloRecords(options?: {
   type?: "person" | "organization";
   q?: string;
   limit?: number;
@@ -49,6 +49,7 @@ export async function listApolloRecords(_options?: {
   enrichmentStatus?: string;
   inContacts?: boolean;
 }) {
+  void options;
   return { records: [], total: 0 };
 }
 
