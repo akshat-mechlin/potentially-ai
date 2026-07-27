@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getConnectorDefinition } from "@/lib/connectors/registry";
 import type { ConnectorKey } from "@/lib/connectors/types";
+import { buildApolloAuthorizeUrl } from "@/lib/oauth/apollo-oauth";
 import { resolveOAuthReturnOrigin } from "@/lib/app-url";
 import {
   buildAzureAuthorizeUrl,
@@ -19,6 +20,21 @@ function connectorsErrorRedirect(origin: string, message: string) {
   const url = new URL("/connectors", origin);
   url.searchParams.set("connect_error", message.slice(0, 240));
   return NextResponse.redirect(url);
+}
+
+function buildAuthorizeUrl(
+  provider: "google" | "azure" | "apollo",
+  params: { scopes: string; redirectUri: string; state: string },
+) {
+  switch (provider) {
+    case "apollo":
+      return buildApolloAuthorizeUrl(params);
+    case "azure":
+      return buildAzureAuthorizeUrl(params);
+    case "google":
+    default:
+      return buildGoogleAuthorizeUrl(params);
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -57,18 +73,11 @@ export async function GET(request: NextRequest) {
   try {
     const redirectUri = getConnectorOAuthCallbackUrl(request);
     const payload = createConnectorOAuthState(connectorKey, user.id, redirectUri);
-    const authorizeUrl =
-      def.oauth.supabaseProvider === "azure"
-        ? buildAzureAuthorizeUrl({
-            scopes: def.oauth.scopes,
-            redirectUri,
-            state: payload.state,
-          })
-        : buildGoogleAuthorizeUrl({
-            scopes: def.oauth.scopes,
-            redirectUri,
-            state: payload.state,
-          });
+    const authorizeUrl = buildAuthorizeUrl(def.oauth.provider, {
+      scopes: def.oauth.scopes,
+      redirectUri,
+      state: payload.state,
+    });
 
     const response = NextResponse.redirect(authorizeUrl);
     response.cookies.set(CONNECTOR_OAUTH_STATE_COOKIE, encodeConnectorOAuthStateCookie(payload), {

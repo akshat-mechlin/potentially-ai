@@ -12,7 +12,6 @@ export const NAV_FLAG_BY_HREF: Partial<Record<string, FeatureFlagKey>> = {
 
 export function filterNavByFlags(items: NavItem[], flags: FeatureFlagsMap | undefined): NavItem[] {
   if (!flags) {
-    // While loading, hide flagged items to avoid a flash of disabled features.
     return items.filter((item) => !NAV_FLAG_BY_HREF[item.href]);
   }
   return items.filter((item) => {
@@ -35,6 +34,9 @@ export function isConnectorAllowedByFlags(
     connector.category === "custom"
   ) {
     return flags.csv_import === true;
+  }
+  if (connector.key === "apollo" || connector.category === "sales_intelligence") {
+    return flags.connector_apollo === true || flags.beta_connectors === true;
   }
   if (connector.category === "google" || connector.key.startsWith("google") || connector.key === "gmail") {
     return flags.google_sync === true;
