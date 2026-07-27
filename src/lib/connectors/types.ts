@@ -14,6 +14,7 @@ export type ConnectorKey =
   | "apple_contacts"
   | "telegram"
   | "whatsapp"
+  | "apollo"
   | "custom_data";
 
 export type ConnectorCategory =
@@ -23,11 +24,21 @@ export type ConnectorCategory =
   | "developer"
   | "messaging"
   | "personal"
+  | "sales_intelligence"
   | "custom";
 
 export type ConnectorAvailability = "live" | "beta" | "coming_soon";
 
-export type ConnectorCapability = "contacts" | "calendar" | "email" | "files" | "social" | "messages";
+export type ConnectorCapability =
+  | "contacts"
+  | "calendar"
+  | "email"
+  | "files"
+  | "social"
+  | "messages"
+  | "search";
+
+export type ConnectorOAuthProvider = "google" | "azure" | "apollo";
 
 export type ConnectorStatus = "active" | "pending" | "expired" | "revoked" | "not_connected";
 
@@ -42,7 +53,9 @@ export interface ConnectorDefinition {
   capabilities: ConnectorCapability[];
   availability: ConnectorAvailability;
   oauth?: {
-    supabaseProvider: string;
+    provider: ConnectorOAuthProvider;
+    /** Legacy Supabase Auth provider id for Google / Microsoft login path. */
+    supabaseProvider?: string;
     scopes: string;
   };
   syncSource?:
@@ -93,6 +106,7 @@ export interface ConnectorState {
 export const CONNECTOR_CATEGORY_ORDER: ConnectorCategory[] = [
   "google",
   "microsoft",
+  "sales_intelligence",
   "social",
   "developer",
   "messaging",
@@ -103,6 +117,7 @@ export const CONNECTOR_CATEGORY_ORDER: ConnectorCategory[] = [
 export const CONNECTOR_CATEGORY_LABELS: Record<ConnectorCategory, string> = {
   google: "Google",
   microsoft: "Microsoft",
+  sales_intelligence: "Sales Intelligence",
   social: "Social Networks",
   developer: "Developer",
   messaging: "Messaging",

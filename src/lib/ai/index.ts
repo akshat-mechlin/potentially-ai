@@ -14,6 +14,7 @@ import {
   geminiGenerateEmbedding,
   geminiGenerateOutreach,
   geminiParseSearchIntent,
+  geminiParseApolloSearchIntent,
   geminiRankAndExplain,
 } from "@/lib/ai/gemini-provider";
 import {
@@ -21,6 +22,7 @@ import {
   openaiGenerateEmbedding,
   openaiGenerateOutreach,
   openaiParseSearchIntent,
+  openaiParseApolloSearchIntent,
   openaiRankAndExplain,
 } from "@/lib/ai/openai-provider";
 
@@ -59,7 +61,22 @@ export async function parseSearchIntent(query: string) {
   } catch {
     return {
       intent: "search",
-      filters: { roles: [], industries: [], keywords: query.split(" ") },
+      filters: { roles: [], industries: [], companies: [], keywords: query.split(" "), locations: [] },
+    };
+  }
+}
+
+export async function parseApolloSearchIntent(query: string) {
+  try {
+    return await runChat("parseApolloSearchIntent", {
+      openai: () => openaiParseApolloSearchIntent(query),
+      gemini: () => geminiParseApolloSearchIntent(query),
+    });
+  } catch {
+    return {
+      intent: "search",
+      apollo_keywords: query.trim(),
+      filters: { roles: [], industries: [], companies: [], keywords: [], locations: [] },
     };
   }
 }

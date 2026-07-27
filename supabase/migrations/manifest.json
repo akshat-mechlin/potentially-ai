@@ -238,5 +238,23 @@
     "name": "thread_message_attachments",
     "file": "20260727200000_thread_message_attachments.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260727210000",
+    "name": "sync_source_apollo",
+    "file": "20260727210000_sync_source_apollo.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260727220000",
+    "name": "apollo_records",
+    "file": "20260727220000_apollo_records.sql",
+    "remote": "applied"
+  },
+  {
+    "version": "20260728120000",
+    "name": "platform_prospects",
+    "file": "20260728120000_platform_prospects.sql",
+    "remote": "applied"
   }
 ]

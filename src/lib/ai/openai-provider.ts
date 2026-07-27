@@ -4,6 +4,7 @@ import {
   CONTACT_SUMMARY_SYSTEM,
   type ContactSummaryInput,
 } from "@/lib/ai/contact-summary";
+import { APOLLO_SEARCH_INTENT_PROMPT } from "@/lib/integrations/apollo/search-intent-to-filters";
 import { searchResultSchema } from "@/lib/ai/schemas";
 
 const openai = process.env.OPENAI_API_KEY
@@ -29,9 +30,24 @@ export async function openaiParseSearchIntent(query: string) {
     messages: [
       {
         role: "system",
-        content: `Parse the user's network search query. Extract intent, roles, industries, companies, and keywords.
-Return JSON: { "intent": string, "filters": { "roles": string[], "industries": string[], "companies": string[], "keywords": string[] } }`,
+        content: `Parse the user's network search query. Extract intent, roles, industries, companies, keywords, and locations.
+Return JSON: { "intent": string, "filters": { "roles": string[], "industries": string[], "companies": string[], "keywords": string[], "locations": string[] } }`,
       },
+      { role: "user", content: query },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  return JSON.parse(response.choices[0].message.content || "{}");
+}
+
+export async function openaiParseApolloSearchIntent(query: string) {
+  if (!openai) throw new Error("OpenAI not configured");
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: APOLLO_SEARCH_INTENT_PROMPT },
       { role: "user", content: query },
     ],
     response_format: { type: "json_object" },

@@ -399,13 +399,17 @@ export async function searchContactsForQuery(
   const { generateEmbedding } = await import("@/lib/ai/openai");
   const embedding = await generateEmbedding(query);
 
+  console.log("[Workspace Search] Generated embedding length:", embedding.length);
+
   let matches: SearchContactMatch[] = [];
   const { data: vectorMatches, error: vectorError } = await supabase.rpc("match_contacts_in_workspaces", {
     query_embedding: embedding,
     match_workspace_ids: workspaceIds,
-    match_threshold: 0.3,
+    match_threshold: 0.6,
     match_count: 20,
   });
+
+  console.log("[Workspace Search] Vector matches:", vectorMatches?.length ?? 0, "error:", vectorError?.message ?? "none");
 
   if (!vectorError && vectorMatches?.length) {
     matches = vectorMatches as SearchContactMatch[];
@@ -415,7 +419,7 @@ export async function searchContactsForQuery(
         const { data } = await supabase.rpc("match_contacts", {
           query_embedding: embedding,
           match_workspace_id: workspaceId,
-          match_threshold: 0.3,
+          match_threshold: 0.6,
           match_count: 20,
         });
         return (data ?? []) as SearchContactMatch[];
@@ -444,8 +448,14 @@ export async function searchContactsForQuery(
   }
 
   if (matches.length > 0) {
+    console.log(
+      "[Workspace Search] Returning matches with similarities:",
+      matches.map((m) => m.similarity).join(", "),
+    );
     return attachContactMetadata(supabase, matches);
   }
+
+  console.log("[Workspace Search] No vector matches, falling back to text search");
 
   let textQuery = supabase
     .from("contacts")
