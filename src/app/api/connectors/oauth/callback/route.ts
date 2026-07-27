@@ -4,6 +4,12 @@ import type { ConnectorKey } from "@/lib/connectors/types";
 import { saveConnectorOAuthTokens, syncConnector } from "@/lib/data/connectors";
 import { resolveOAuthReturnOrigin } from "@/lib/app-url";
 import {
+  apolloTokenExpiresAt,
+  exchangeApolloAuthorizationCode,
+  fetchApolloUserProfile,
+  parseApolloOAuthCallbackError,
+} from "@/lib/oauth/apollo-oauth";
+import {
   CONNECTOR_OAUTH_STATE_COOKIE,
   decodeConnectorOAuthStateCookie,
   exchangeAzureAuthorizationCode,
@@ -20,10 +26,7 @@ function clearStateCookie(response: NextResponse) {
   });
 }
 
-function connectorsRedirect(
-  origin: string,
-  params: Record<string, string>,
-) {
+function connectorsRedirect(origin: string, params: Record<string, string>) {
   const url = new URL("/connectors", origin);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
@@ -40,15 +43,18 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
   const oauthError = searchParams.get("error");
   const oauthErrorDescription = searchParams.get("error_description");
+  const apolloError = parseApolloOAuthCallbackError(searchParams);
 
   const payload = decodeConnectorOAuthStateCookie(
     request.cookies.get(CONNECTOR_OAUTH_STATE_COOKIE)?.value,
   );
 
-  if (oauthError) {
-    const description = oauthErrorDescription
-      ? decodeURIComponent(oauthErrorDescription.replace(/\+/g, " "))
-      : oauthError;
+  if (apolloError || oauthError) {
+    const description = apolloError
+      ? apolloError
+      : oauthErrorDescription
+        ? decodeURIComponent(oauthErrorDescription.replace(/\+/g, " "))
+        : oauthError ?? "OAuth authorization failed.";
     console.error("[connector.oauth.callback] provider error", {
       oauthError,
       description,
@@ -98,32 +104,62 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens =
-      def.oauth.supabaseProvider === "azure"
-        ? await exchangeAzureAuthorizationCode({
-            code,
-            redirectUri: payload.redirectUri,
-            scopes: def.oauth.scopes,
-          })
-        : await exchangeGoogleAuthorizationCode({
-            code,
-            redirectUri: payload.redirectUri,
-          });
+    const provider = def.oauth.provider;
+    let accessToken: string;
+    let refreshToken: string | null;
+    let profile: { providerAccountId: string; accountEmail: string | null; accountLabel: string };
+    let extraMetadata: Record<string, unknown> = { flow: "direct_connector_oauth" };
 
-    const profile =
-      def.oauth.supabaseProvider === "azure"
-        ? await fetchAzureAccountProfile(tokens.accessToken, tokens.idToken)
-        : await fetchGoogleAccountProfile(tokens.accessToken);
+    if (provider === "apollo") {
+      const tokens = await exchangeApolloAuthorizationCode({
+        code,
+        redirectUri: payload.redirectUri,
+      });
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+      profile = await fetchApolloUserProfile(tokens.accessToken);
+      extraMetadata = {
+        ...extraMetadata,
+        oauth_provider: "apollo",
+        scopes: tokens.scope,
+        token_expires_at: apolloTokenExpiresAt(tokens.expiresIn),
+      };
+    } else if (provider === "azure") {
+      const tokens = await exchangeAzureAuthorizationCode({
+        code,
+        redirectUri: payload.redirectUri,
+        scopes: def.oauth.scopes,
+      });
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+      profile = await fetchAzureAccountProfile(tokens.accessToken, tokens.idToken);
+      extraMetadata = {
+        ...extraMetadata,
+        supabase_provider: def.oauth.supabaseProvider,
+      };
+    } else {
+      const tokens = await exchangeGoogleAuthorizationCode({
+        code,
+        redirectUri: payload.redirectUri,
+      });
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+      profile = await fetchGoogleAccountProfile(tokens.accessToken);
+      extraMetadata = {
+        ...extraMetadata,
+        supabase_provider: def.oauth.supabaseProvider,
+      };
+    }
 
     await saveConnectorOAuthTokens(supabase, {
       connectorKey,
       userId: user.id,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      accessToken,
+      refreshToken,
       providerAccountId: profile.providerAccountId,
       accountEmail: profile.accountEmail,
       accountLabel: profile.accountLabel,
-      metadata: { flow: "direct_connector_oauth" },
+      metadata: extraMetadata,
     });
 
     let synced = false;

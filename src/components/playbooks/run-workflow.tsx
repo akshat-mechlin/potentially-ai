@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsClient } from "@/hooks/use-is-client";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { cn } from "@/lib/utils";
+import { ApolloDiscoverPanel } from "@/components/playbooks/apollo-discover-panel";
 import { playbookRunApiBase } from "@/lib/routes/playbook-runs";
 import type { PlaybookProspect, PlaybookRun } from "@/types/playbooks";
 import { toast } from "sonner";
@@ -326,6 +327,13 @@ export function RunWorkflow({ playbookId, runId, embedded = false }: RunWorkflow
           </Card>
         )}
       </div>
+
+      <ApolloDiscoverPanel
+        runId={runId}
+        icpProfile={run.icp_snapshot}
+        compact={compact}
+        onImported={refetch}
+      />
 
       <section className="mobile-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
