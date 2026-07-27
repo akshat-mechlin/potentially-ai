@@ -1,18 +1,11 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  Building2,
-  Mail,
-  ExternalLink,
-  Sparkles,
-  Send,
-  Loader2,
-} from "lucide-react";
+import { ArrowLeft, Building2, Mail, ExternalLink, Sparkles, Send, Loader2 } from "lucide-react";
 import type { Contact, OutreachResult, WorkspaceEmailSettings } from "@/types";
 import type { MutualConnection } from "@/lib/data/mutual-connections";
 import { MobileHeaderTitle } from "@/components/layout/mobile-header-title";
@@ -49,6 +42,7 @@ import type { ContactDetailPoint } from "@/lib/contacts/profile-details";
 import { ContactProfileSummary } from "@/components/contacts/contact-profile-summary";
 import { InfoHint } from "@/components/playbooks/field-hint";
 import { useOutreachEnabled } from "@/hooks/use-feature-flags";
+import { useApolloConnector } from "@/hooks/use-apollo-connector";
 import { useWorkspaceStore } from "@/stores";
 import { getInitials, formatRelativeTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -85,6 +79,8 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const { isMobileApp } = useMobileApp();
   const { enabled: outreachEnabled } = useOutreachEnabled();
   const workspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ContactTab>(
     defaultTab === "outreach" && !outreachEnabled ? "overview" : defaultTab,
   );
@@ -98,6 +94,13 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
   const [outreach, setOutreach] = useState<OutreachResult | null>(null);
   const [introOpen, setIntroOpen] = useState(false);
   const [requestingIntro, setRequestingIntro] = useState<"mailto" | "potentially" | null>(null);
+  const [enrichConfirmOpen, setEnrichConfirmOpen] = useState(false);
+  const [enrichingApollo, setEnrichingApollo] = useState(false);
+  const {
+    connected: apolloConnected,
+    connectHref: apolloConnectHref,
+    accountLabel: apolloAccountLabel,
+  } = useApolloConnector();
 
   const { data: contact, isLoading } = useQuery<Contact>({
     queryKey: ["contact", id],
@@ -162,6 +165,48 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
     );
   }
 
+  const handleEnrichWithApollo = async () => {
+    setEnrichingApollo(true);
+    try {
+      const stubRes = await fetch("/api/apollo/records/stub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_id: id }),
+      });
+      const stubData = await stubRes.json();
+      if (!stubRes.ok) throw new Error(stubData.error || "Failed to prepare Apollo enrichment");
+
+      const enrichRes = await fetch("/api/search/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform_prospect_ids: [stubData.record.id],
+          acknowledge_unverified: true,
+        }),
+      });
+      const enrichData = await enrichRes.json();
+      if (!enrichRes.ok) throw new Error(enrichData.error || "Enrichment failed");
+
+      const result = (enrichData.results ?? [])[0] as
+        | { status: string; error?: string; reason?: string }
+        | undefined;
+      if (result?.status === "enriched") {
+        toast.success("Contact enriched with Apollo");
+        await queryClient.invalidateQueries({ queryKey: ["contact", id] });
+        setEnrichConfirmOpen(false);
+        return;
+      }
+      if (result?.status === "failed") {
+        throw new Error(result.error ?? result.reason ?? "Enrichment failed");
+      }
+      throw new Error(result?.reason ?? "Enrichment did not complete");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to enrich with Apollo");
+    } finally {
+      setEnrichingApollo(false);
+    }
+  };
+
   const handleGenerateOutreach = async () => {
     setGenerating(true);
     try {
@@ -206,7 +251,9 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to send email");
-      toast.success(data.skipped ? "Email logged (send skipped in this environment)" : "Email sent");
+      toast.success(
+        data.skipped ? "Email logged (send skipped in this environment)" : "Email sent",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to send email");
     } finally {
@@ -269,7 +316,9 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
             mail app or send from Potentially when email is configured.
           </DialogDescription>
         </DialogHeader>
-        <div className={`flex flex-col gap-2 pb-[env(safe-area-inset-bottom)] sm:pb-0 ${isMobileApp ? "" : "sm:flex-row"}`}>
+        <div
+          className={`flex flex-col gap-2 pb-[env(safe-area-inset-bottom)] sm:pb-0 ${isMobileApp ? "" : "sm:flex-row"}`}
+        >
           <Button
             variant="outline"
             className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
@@ -310,12 +359,53 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
     </Dialog>
   );
 
+  const enrichDialog = (
+    <Dialog open={enrichConfirmOpen} onOpenChange={setEnrichConfirmOpen}>
+      <DialogContent className={isMobileApp ? MOBILE_BOTTOM_SHEET : undefined}>
+        <DialogHeader>
+          <DialogTitle>Enrich with Apollo</DialogTitle>
+          <DialogDescription>
+            Enrichment uses your Apollo account credits. Apollo bills enrichment to your plan
+            {apolloAccountLabel ? ` (${apolloAccountLabel})` : ""}, not Potentially.
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          className={`flex flex-col gap-2 pb-[env(safe-area-inset-bottom)] sm:pb-0 ${isMobileApp ? "" : "sm:flex-row"}`}
+        >
+          <Button
+            variant="outline"
+            className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+            onClick={() => setEnrichConfirmOpen(false)}
+            disabled={enrichingApollo}
+          >
+            Cancel
+          </Button>
+          <Button
+            className={isMobileApp ? "w-full rounded-xl" : "flex-1"}
+            onClick={handleEnrichWithApollo}
+            disabled={enrichingApollo}
+          >
+            {enrichingApollo ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+            Enrich contact
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const outreachForm = (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">Type</label>
-          <Select value={outreachType} onValueChange={(v) => setOutreachType(v as typeof outreachType)}>
+          <Select
+            value={outreachType}
+            onValueChange={(v) => setOutreachType(v as typeof outreachType)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -344,7 +434,11 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         <label className="text-sm font-medium">Goal</label>
         <Textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={2} />
       </div>
-      <Button onClick={handleGenerateOutreach} disabled={generating} className={isMobileApp ? "w-full rounded-xl" : undefined}>
+      <Button
+        onClick={handleGenerateOutreach}
+        disabled={generating}
+        className={isMobileApp ? "w-full rounded-xl" : undefined}
+      >
         {generating ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         ) : (
@@ -353,7 +447,9 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         Generate
       </Button>
       {outreach && (
-        <div className={`space-y-3 rounded-xl bg-muted/30 p-4 ${isMobileApp ? "mobile-card-flat" : "border"}`}>
+        <div
+          className={`space-y-3 rounded-xl bg-muted/30 p-4 ${isMobileApp ? "mobile-card-flat" : "border"}`}
+        >
           <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-subject">
               Subject
@@ -389,7 +485,12 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           </div>
           <div className={`flex flex-wrap gap-2 ${isMobileApp ? "flex-col" : ""}`}>
             {contact.email ? (
-              <Button variant="outline" size="sm" className={isMobileApp ? "w-full rounded-xl" : undefined} asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={isMobileApp ? "w-full rounded-xl" : undefined}
+                asChild
+              >
                 <a href={buildMailtoHref(contact.email, outreach)}>
                   <Mail className="mr-2 h-4 w-4" />
                   Open in mail app
@@ -435,7 +536,9 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         <div className="space-y-4 pb-24">
           <div className="flex items-start gap-3">
             <Avatar className="h-14 w-14 shrink-0">
-              <AvatarFallback className="text-base">{getInitials(contact.full_name)}</AvatarFallback>
+              <AvatarFallback className="text-base">
+                {getInitials(contact.full_name)}
+              </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-muted-foreground">{contact.title}</p>
@@ -447,7 +550,12 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
               )}
               <div className="mt-2 flex flex-wrap gap-2">
                 {contact.email && (
-                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs" asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    asChild
+                  >
                     <a href={`mailto:${contact.email}`}>
                       <Mail className="mr-1 h-3 w-3" />
                       Email
@@ -455,7 +563,12 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                   </Button>
                 )}
                 {contact.linkedin_url && (
-                  <Button variant="outline" size="sm" className="h-8 rounded-full px-3 text-xs" asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full px-3 text-xs"
+                    asChild
+                  >
                     <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="mr-1 h-3 w-3" />
                       LinkedIn
@@ -471,6 +584,31 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                   <Send className="mr-1 h-3 w-3" />
                   Intro
                 </Button>
+                {apolloConnected ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={() => setEnrichConfirmOpen(true)}
+                    disabled={enrichingApollo}
+                  >
+                    {enrichingApollo ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-1 h-3 w-3" />
+                    )}
+                    Apollo
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 rounded-full px-3 text-xs"
+                    asChild
+                  >
+                    <Link href={apolloConnectHref}>Apollo</Link>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -498,11 +636,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
 
           {activeTab === "overview" && (
             <div className="space-y-3">
-              <ContactProfileSummary
-                summary={summary}
-                details={detailPoints}
-                variant="mobile"
-              />
+              <ContactProfileSummary summary={summary} details={detailPoints} variant="mobile" />
 
               {(mutualsLoading || mutualContacts.length > 0) && (
                 <div className="mobile-menu-list">
@@ -532,10 +666,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
               {(contact.tags?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap gap-2 px-1">
                   {contact.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-muted px-3 py-1 text-xs font-medium"
-                    >
+                    <span key={tag} className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
                       {tag}
                     </span>
                   ))}
@@ -562,11 +693,10 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
             </div>
           )}
 
-          {activeTab === "outreach" && (
-            <div className="mobile-card-flat p-4">{outreachForm}</div>
-          )}
+          {activeTab === "outreach" && <div className="mobile-card-flat p-4">{outreachForm}</div>}
         </div>
         {introDialog}
+        {enrichDialog}
       </>
     );
   }
@@ -616,17 +746,32 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
               <Send className="mr-1 h-3 w-3" />
               Request intro
             </Button>
+            {apolloConnected ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEnrichConfirmOpen(true)}
+                disabled={enrichingApollo}
+              >
+                {enrichingApollo ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 h-3 w-3" />
+                )}
+                Enrich with Apollo
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={apolloConnectHref}>Connect Apollo</Link>
+              </Button>
+            )}
           </div>
         </div>
         <div className="text-right">
           <div className="font-display text-2xl text-primary">{contact.strength_score}%</div>
           <p className="inline-flex items-center justify-end gap-1 text-xs text-muted-foreground">
             Relationship strength
-            <InfoHint
-              label="Relationship strength"
-              hint={STRENGTH_SCORE_HINT}
-              side="left"
-            />
+            <InfoHint label="Relationship strength" hint={STRENGTH_SCORE_HINT} side="left" />
           </p>
         </div>
       </div>
@@ -642,11 +787,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <ContactProfileSummary
-            summary={summary}
-            details={detailPoints}
-            variant="desktop"
-          />
+          <ContactProfileSummary summary={summary} details={detailPoints} variant="desktop" />
 
           <Card>
             <CardHeader>
@@ -657,8 +798,8 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
                 <p className="text-sm text-muted-foreground">Finding connections…</p>
               ) : mutualContacts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No mutual connections found yet. People at the same company, shared email
-                  domains, or linked relationship events will show up here.
+                  No mutual connections found yet. People at the same company, shared email domains,
+                  or linked relationship events will show up here.
                 </p>
               ) : (
                 mutualContacts.map((c) => (
@@ -686,10 +827,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           {(contact.tags?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-2">
               {contact.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-muted px-3 py-1 text-xs font-medium"
-                >
+                <span key={tag} className="rounded-full bg-muted px-3 py-1 text-xs font-medium">
                   {tag}
                 </span>
               ))}
@@ -701,7 +839,10 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
           <Card>
             <CardContent className="space-y-4 pt-6">
               {timelineEvents.map((event) => (
-                <div key={event.title} className="flex items-center justify-between border-b pb-3 last:border-0">
+                <div
+                  key={event.title}
+                  className="flex items-center justify-between border-b pb-3 last:border-0"
+                >
                   <div>
                     <p className="text-sm font-medium">{event.title}</p>
                     <p className="text-xs text-muted-foreground capitalize">{event.type}</p>
@@ -727,6 +868,7 @@ function ContactDetailContent({ contactId }: { contactId: string }) {
         </TabsContent>
       </Tabs>
       {introDialog}
+      {enrichDialog}
     </div>
   );
 }

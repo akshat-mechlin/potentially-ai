@@ -96,10 +96,19 @@ export async function geminiGenerateEmbedding(text: string): Promise<number[]> {
 
 export async function geminiParseSearchIntent(query: string) {
   const model = getChatModel(
-    `Parse the user's network search query. Extract intent, roles, industries, companies, and keywords.
-Return JSON: { "intent": string, "filters": { "roles": string[], "industries": string[], "companies": string[], "keywords": string[] } }`,
+    `Parse the user's network search query. Extract intent, roles, industries, companies, keywords, and locations.
+Return JSON: { "intent": string, "filters": { "roles": string[], "industries": string[], "companies": string[], "keywords": string[], "locations": string[] } }`,
   );
 
+  const result = await model.generateContent(query);
+  return parseModelJson(result.response.text());
+}
+
+export async function geminiParseApolloSearchIntent(query: string) {
+  const { APOLLO_SEARCH_INTENT_PROMPT } = await import(
+    "@/lib/integrations/apollo/search-intent-to-filters"
+  );
+  const model = getChatModel(APOLLO_SEARCH_INTENT_PROMPT);
   const result = await model.generateContent(query);
   return parseModelJson(result.response.text());
 }

@@ -1386,3 +1386,59 @@ export async function getProspectThreadContext(runContactId: string) {
     viewer_role: "sender" as const,
   };
 }
+
+async function resolveImportedContactIds(
+  supabase: NonNullable<Awaited<ReturnType<typeof getUserWorkspaceContext>>["supabase"]>,
+  workspaceId: string,
+  externalIds: string[],
+  emails: string[],
+) {
+  const ids = new Set<string>();
+  if (externalIds.length) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .in("external_id", externalIds);
+    for (const row of data ?? []) ids.add(row.id as string);
+  }
+  const normalizedEmails = [...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
+  if (normalizedEmails.length) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .in("email", normalizedEmails);
+    for (const row of data ?? []) ids.add(row.id as string);
+  }
+  return [...ids];
+}
+
+export async function importApolloProspectsIntoRun(
+  runId: string,
+  people: import("@/lib/integrations/apollo/types").ApolloPerson[],
+) {
+  if (isDataDemoMode()) {
+    return { saved: people.length, records: [] as string[] };
+  }
+
+  const run = await getPlaybookRun(runId);
+  if (!run) throw new Error("Run not found");
+
+  const { saveApolloProspectsForPlaybookRun } = await import("@/lib/data/platform-prospects");
+  const result = await saveApolloProspectsForPlaybookRun(people);
+  if (!result.saved) throw new Error("No importable Apollo prospects selected.");
+
+  await logAuditEvent("playbook.apollo_save", "playbook_run", runId, {
+    saved: result.saved,
+    record_ids: result.prospects.map((prospect) => prospect.id),
+  });
+
+  return {
+    saved: result.saved,
+    records: result.prospects,
+    matched: 0,
+    skipped: 0,
+    contact_ids: [] as string[],
+  };
+}

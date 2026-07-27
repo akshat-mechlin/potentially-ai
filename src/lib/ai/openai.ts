@@ -3,6 +3,7 @@ export {
   searchResultSchema,
   generateEmbedding,
   parseSearchIntent,
+  parseApolloSearchIntent,
   rankAndExplain,
   generateOutreach,
   generateContactSummary,
