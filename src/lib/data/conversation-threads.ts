@@ -88,7 +88,19 @@ export async function getThreadMessages(
     .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  const messages = data ?? [];
+  if (messages.length === 0) return messages;
+
+  const { loadSignedThreadAttachments, groupAttachmentsByMessage } = await import(
+    "@/lib/data/thread-attachments"
+  );
+  const attachments = await loadSignedThreadAttachments(supabase, threadId);
+  const byMessage = groupAttachmentsByMessage(attachments);
+
+  return messages.map((message) => ({
+    ...message,
+    attachments: byMessage.get(message.id as string) ?? [],
+  }));
 }
 
 export async function refreshThreadLastMessageAt(

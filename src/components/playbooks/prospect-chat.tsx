@@ -1,19 +1,29 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Mail, MessageSquare, Send, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Loader2, Mail, MessageSquare, Trash2 } from "lucide-react";
+import { ChatComposer } from "@/components/playbooks/chat-composer";
+import { ChatMessageAttachments } from "@/components/playbooks/chat-attachments";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { isOwnChatMessage, isSenderOnlyThreadMessage, shouldNotifySenderOfThreadEvent } from "@/lib/chat/thread-visibility";
+import {
+  isOwnChatMessage,
+  isOwnOutgoingThreadMessage,
+  isSenderOnlyThreadMessage,
+  shouldNotifySenderOfThreadEvent,
+} from "@/lib/chat/thread-visibility";
+import {
+  assertChatAttachmentFiles,
+  chatMessageBodyOrAttachmentFallback,
+  resolveChatAttachmentMime,
+} from "@/lib/chat/attachments";
 import { createClient } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/demo-data";
-import { cn } from "@/lib/utils";
+import { cn, formatMessageTimestamp } from "@/lib/utils";
 import { useMobileApp } from "@/hooks/use-mobile-app";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import type { ChatDeliveryMode } from "@/types/chats";
-import type { ThreadMessage } from "@/types/playbooks";
+import type { ThreadMessage, ThreadMessageAttachment } from "@/types/playbooks";
 import { toast } from "sonner";
 
 interface ProspectChatProps {
@@ -35,6 +45,66 @@ function threadQueryKey(runId: string, prospectId: string) {
   return ["prospect-thread", runId, prospectId] as const;
 }
 
+function mergeThreadResponse(current: ThreadResponse | undefined, payload: ThreadResponse) {
+  if (!current) return payload;
+
+  const serverIds = new Set(payload.messages.map((message) => message.id));
+  const extras = current.messages.filter(
+    (message) => !serverIds.has(message.id) && !message.id.startsWith("pending-"),
+  );
+  if (!extras.length) return payload;
+
+  const messages = [...payload.messages, ...extras].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  return { ...payload, messages };
+}
+
+function appendThreadMessage(current: ThreadResponse, row: ThreadMessage) {
+  if (current.messages.some((message) => message.id === row.id)) {
+    return current;
+  }
+
+  const messages = [...current.messages];
+
+  if (isOwnOutgoingThreadMessage(row, current.viewer_role)) {
+    const pendingIdx = messages.findIndex(
+      (message) => message.id.startsWith("pending-") && message.body === row.body,
+    );
+    if (pendingIdx >= 0) {
+      messages[pendingIdx] = row;
+      return { ...current, messages };
+    }
+  }
+
+  messages.push(row);
+  return { ...current, messages };
+}
+
+function pendingAttachmentsFromFiles(
+  files: File[],
+  threadId: string,
+  messageId: string,
+): ThreadMessageAttachment[] {
+  return files.map((file, index) => ({
+    id: `pending-attach-${messageId}-${index}`,
+    thread_id: threadId,
+    message_id: messageId,
+    uploaded_by: "pending",
+    file_name: file.name,
+    file_size: file.size,
+    mime_type: resolveChatAttachmentMime(file),
+    storage_path: "",
+    created_at: new Date().toISOString(),
+    url:
+      file.type.startsWith("image/") ||
+      file.type.startsWith("video/") ||
+      file.type.startsWith("audio/")
+        ? URL.createObjectURL(file)
+        : null,
+  }));
+}
+
 function MessageBubble({
   msg,
   viewerRole,
@@ -49,6 +119,8 @@ function MessageBubble({
   const isSystem = msg.message_type === "system";
   const isOwn = isOwnChatMessage(msg, viewerRole);
   const canDelete = Boolean(onDelete) && isOwn && !isSystem && !msg.id.startsWith("pending-");
+  const hasAttachments = Boolean(msg.attachments?.length);
+  const showBody = Boolean(msg.body.trim()) && !(hasAttachments && msg.body === "See attached file(s).");
 
   return (
     <div className={cn("group space-y-1", isOwn && !isSystem && "flex flex-col items-end")}>
@@ -61,16 +133,19 @@ function MessageBubble({
       {msg.message_type === "inbound_email" && viewerRole === "sender" && (
         <p className="text-center text-[10px] text-muted-foreground">Reply via email</p>
       )}
-      <div className={cn("flex max-w-[85%] items-end gap-1", isOwn && !isSystem && "flex-row-reverse")}>
+      <div
+        className={cn("flex max-w-[85%] items-end gap-1", isOwn && !isSystem && "flex-row-reverse")}
+      >
         <div
           className={cn(
-            "w-fit rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
+            "w-fit max-w-full space-y-2 rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap",
             !isOwn && !isSystem && "bg-muted",
             isSystem && "mx-auto bg-muted/50 text-center text-xs text-muted-foreground",
             isOwn && !isSystem && "bg-primary text-primary-foreground",
           )}
         >
-          {msg.body}
+          {showBody ? <p>{msg.body}</p> : null}
+          <ChatMessageAttachments attachments={msg.attachments} isOwn={isOwn && !isSystem} />
         </div>
         {canDelete && (
           <button
@@ -80,10 +155,26 @@ function MessageBubble({
             disabled={deleting}
             onClick={() => onDelete?.(msg.id)}
           >
-            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {deleting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
           </button>
         )}
       </div>
+      {!isSystem ? (
+        <time
+          dateTime={msg.created_at}
+          className={cn(
+            "px-1 text-[10px] text-muted-foreground",
+            isOwn && "text-right",
+          )}
+          title={new Date(msg.created_at).toLocaleString()}
+        >
+          {formatMessageTimestamp(msg.created_at)}
+        </time>
+      ) : null}
     </div>
   );
 }
@@ -118,8 +209,9 @@ function DeliveryBanner({ data }: { data: ThreadResponse }) {
 export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChatProps) {
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
-  const instanceId = useId();
+  const pendingMessageIdRef = useRef<string | null>(null);
   const [message, setMessage] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { isMobileApp } = useMobileApp();
@@ -144,73 +236,97 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
   useEffect(() => {
     if (isDemoMode() || !threadId || data?.chat_enabled === false) return;
 
+    let cancelled = false;
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
     const supabase = createClient();
-    const channelName = `prospect-thread:${threadId}:${instanceId}`;
+    const queryKey = threadQueryKey(runId, prospectId);
 
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "thread_messages",
-          filter: `thread_id=eq.${threadId}`,
-        },
-        (payload) => {
-          const row = payload.new as ThreadMessage;
-          queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) => {
-            if (!current) return current;
-            if (current.messages.some((message) => message.id === row.id)) {
-              return current;
-            }
-            if (current.viewer_role === "recipient" && isSenderOnlyThreadMessage(row)) {
-              return current;
-            }
-            if (current.viewer_role === "sender" && shouldNotifySenderOfThreadEvent(row)) {
-              toast.info(
-                row.metadata?.event === "calendly_booked"
-                  ? "Meeting booked via Calendly"
-                  : "Reply received via email",
-              );
-            }
-            return {
-              ...current,
-              messages: [...current.messages, row],
-            };
-          });
-          void queryClient.invalidateQueries({ queryKey: ["chats"] });
-          void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "thread_messages",
-          filter: `thread_id=eq.${threadId}`,
-        },
-        (payload) => {
-          const row = payload.old as { id?: string };
-          if (!row.id) return;
-          queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) => {
-            if (!current) return current;
-            return {
-              ...current,
-              messages: current.messages.filter((message) => message.id !== row.id),
-            };
-          });
-          void queryClient.invalidateQueries({ queryKey: ["chats"] });
-          void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
-        },
-      )
-      .subscribe();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled || !session?.user) return;
+
+      const next = supabase
+        .channel(`prospect-thread:${threadId}:${crypto.randomUUID()}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "thread_messages",
+            filter: `thread_id=eq.${threadId}`,
+          },
+          (payload) => {
+            const row = payload.new as ThreadMessage;
+            queryClient.setQueryData<ThreadResponse>(queryKey, (current) => {
+              if (!current) {
+                void queryClient.invalidateQueries({ queryKey });
+                return current;
+              }
+              if (current.viewer_role === "recipient" && isSenderOnlyThreadMessage(row)) {
+                return current;
+              }
+              if (current.viewer_role === "sender" && shouldNotifySenderOfThreadEvent(row)) {
+                toast.info(
+                  row.metadata?.event === "calendly_booked"
+                    ? "Meeting booked via Calendly"
+                    : "Reply received via email",
+                );
+              }
+
+              const nextState = appendThreadMessage(current, row);
+              if (
+                pendingMessageIdRef.current &&
+                nextState.messages.some((message) => message.id === row.id)
+              ) {
+                pendingMessageIdRef.current = null;
+              }
+              void queryClient.invalidateQueries({ queryKey });
+              return nextState;
+            });
+            void queryClient.invalidateQueries({ queryKey: ["chats"] });
+            void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "thread_messages",
+            filter: `thread_id=eq.${threadId}`,
+          },
+          (payload) => {
+            const row = payload.old as { id?: string };
+            if (!row.id) return;
+            queryClient.setQueryData<ThreadResponse>(queryKey, (current) => {
+              if (!current) {
+                void queryClient.invalidateQueries({ queryKey });
+                return current;
+              }
+              return {
+                ...current,
+                messages: current.messages.filter((message) => message.id !== row.id),
+              };
+            });
+            void queryClient.invalidateQueries({ queryKey: ["chats"] });
+            void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
+          },
+        )
+        .subscribe();
+
+      if (cancelled) {
+        void supabase.removeChannel(next);
+        return;
+      }
+      channel = next;
+    });
 
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) {
+        void supabase.removeChannel(channel);
+      }
     };
-  }, [threadId, data?.chat_enabled, queryClient, runId, prospectId, instanceId]);
+  }, [threadId, data?.chat_enabled, queryClient, runId, prospectId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -226,12 +342,29 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
   }
 
   const send = async () => {
-    const body = message.trim();
-    if (!body) return;
+    const trimmed = message.trim();
+    if (!trimmed && files.length === 0) return;
+
+    try {
+      assertChatAttachmentFiles(files);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Invalid attachment");
+      return;
+    }
+
+    let messageBody: string;
+    try {
+      messageBody = chatMessageBodyOrAttachmentFallback(trimmed, files);
+    } catch {
+      return;
+    }
 
     const viewerRole = data?.viewer_role ?? "sender";
     const optimisticId = `pending-${Date.now()}`;
     const previous = queryClient.getQueryData<ThreadResponse>(threadQueryKey(runId, prospectId));
+    const outgoingFiles = [...files];
+
+    pendingMessageIdRef.current = optimisticId;
 
     queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) => {
       if (!current) return current;
@@ -239,11 +372,15 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
         id: optimisticId,
         thread_id: current.thread_id ?? "",
         sender_user_id: null,
-        body,
-        message_type:
-          viewerRole === "recipient" ? "platform_inbound" : "platform_outbound",
+        body: messageBody,
+        message_type: viewerRole === "recipient" ? "platform_inbound" : "platform_outbound",
         metadata: {},
         created_at: new Date().toISOString(),
+        attachments: pendingAttachmentsFromFiles(
+          outgoingFiles,
+          current.thread_id ?? "",
+          optimisticId,
+        ),
       };
       return {
         ...current,
@@ -252,16 +389,34 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
     });
 
     setMessage("");
+    setFiles([]);
     setSending(true);
     try {
-      const res = await fetch(`/api/chats/${prospectId}/thread`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
-      });
+      let res: Response;
+      if (outgoingFiles.length > 0) {
+        const form = new FormData();
+        form.set("body", trimmed);
+        for (const file of outgoingFiles) {
+          form.append("files", file);
+        }
+        res = await fetch(`/api/chats/${prospectId}/thread`, {
+          method: "POST",
+          body: form,
+        });
+      } else {
+        res = await fetch(`/api/chats/${prospectId}/thread`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: trimmed }),
+        });
+      }
+
       const payload = (await res.json()) as ThreadResponse & { error?: string };
       if (!res.ok) throw new Error(payload.error ?? "Failed to send");
-      queryClient.setQueryData(threadQueryKey(runId, prospectId), payload);
+      pendingMessageIdRef.current = null;
+      queryClient.setQueryData<ThreadResponse>(threadQueryKey(runId, prospectId), (current) =>
+        mergeThreadResponse(current, payload),
+      );
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
       void queryClient.invalidateQueries({ queryKey: ["chat-detail", prospectId] });
       if (payload.viewer_role === "sender" && !payload.recipient_on_platform) {
@@ -270,10 +425,12 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
         toast.success("Message delivered in-app");
       }
     } catch (error) {
+      pendingMessageIdRef.current = null;
       if (previous) {
         queryClient.setQueryData(threadQueryKey(runId, prospectId), previous);
       }
-      setMessage(body);
+      setMessage(trimmed);
+      setFiles(outgoingFiles);
       toast.error(error instanceof Error ? error.message : "Failed to send message");
     } finally {
       setSending(false);
@@ -348,23 +505,16 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
             messages
           )}
         </div>
-        <div className="mobile-chat-composer">
-          <input
-            className="mobile-chat-input"
-            placeholder="Message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-          />
-          <Button
-            size="icon"
-            className="mobile-chat-send"
-            onClick={send}
-            disabled={sending || !message.trim()}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+        <ChatComposer
+          variant="mobile"
+          message={message}
+          onMessageChange={setMessage}
+          files={files}
+          onFilesChange={setFiles}
+          onSend={() => void send()}
+          sending={sending}
+          placeholder="Message"
+        />
         {confirmDialog}
       </div>
     );
@@ -379,17 +529,14 @@ export function ProspectChat({ runId, prospectId, enabled = true }: ProspectChat
           messages
         )}
       </ScrollArea>
-      <div className="flex gap-2 border-t p-3">
-        <Input
-          placeholder="Write a message..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-        />
-        <Button size="icon" onClick={send} disabled={sending}>
-          <Send className="h-4 w-4" />
-        </Button>
-      </div>
+      <ChatComposer
+        message={message}
+        onMessageChange={setMessage}
+        files={files}
+        onFilesChange={setFiles}
+        onSend={() => void send()}
+        sending={sending}
+      />
       {confirmDialog}
     </div>
   );

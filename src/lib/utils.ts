@@ -28,6 +28,29 @@ export function formatRelativeTime(date: string | Date) {
   return formatDate(date);
 }
 
+export function formatMessageTimestamp(date: string | Date) {
+  const then = new Date(date);
+  const now = new Date();
+  const sameDay = then.toDateString() === now.toDateString();
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(then);
+
+  if (sameDay) return time;
+
+  const day = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(then);
+
+  if (then.getFullYear() !== now.getFullYear()) {
+    return `${day}, ${then.getFullYear()}, ${time}`;
+  }
+
+  return `${day}, ${time}`;
+}
+
 export function slugify(text: string) {
   return text
     .toLowerCase()

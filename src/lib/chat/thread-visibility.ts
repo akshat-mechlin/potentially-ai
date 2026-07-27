@@ -39,6 +39,15 @@ export function isOwnChatMessage(msg: ThreadMessage, viewerRole: ChatViewerRole)
   );
 }
 
+/** Confirmed row from the viewer's own send (used to swap an optimistic pending bubble). */
+export function isOwnOutgoingThreadMessage(msg: ThreadMessage, viewerRole: ChatViewerRole): boolean {
+  if (viewerRole === "recipient") {
+    return msg.message_type === "platform_inbound";
+  }
+
+  return msg.message_type === "platform_outbound" || msg.message_type === "outbound_chat_email";
+}
+
 export function shouldNotifySenderOfThreadEvent(msg: ThreadMessage): boolean {
   if (msg.message_type === "inbound_email") return true;
   return msg.message_type === "system" && msg.metadata?.event === "calendly_booked";

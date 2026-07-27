@@ -232,5 +232,11 @@
     "name": "intro_recipient_visibility",
     "file": "20260724200000_intro_recipient_visibility.sql",
     "remote": "applied"
+  },
+  {
+    "version": "20260727200000",
+    "name": "thread_message_attachments",
+    "file": "20260727200000_thread_message_attachments.sql",
+    "remote": "applied"
   }
 ]
